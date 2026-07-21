@@ -125,3 +125,8 @@ Before writing any code, ask yourself:
 - Am I solving today's problem or a hypothetical future problem?
 - If the abstraction is only useful for future possibilities, do not implement it yet.
 - Always choose the simplest solution that scales naturally.
+
+## ECC Glossary & Definition (CRITICAL)
+- Whenever the user refers to **"ECC"**, they are referring to the **"Everything Claude Code"** ecosystem located in the `/Users/ibm/Downloads/LogicEye-main/everything-claude-code/` directory.
+- **NEVER** confuse "ECC" with "Extreme Coding Constraints".
+- When asked to "use ECC", prioritize the agents, skills, hooks, and workflows defined in the `everything-claude-code` directory for the given task.

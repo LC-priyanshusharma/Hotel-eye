@@ -1,0 +1,35 @@
+import { Outlet } from 'react-router-dom'
+import { TopNav } from './TopNav'
+import { Sidebar } from './Sidebar'
+import { RightPanel } from './RightPanel'
+import { useAppStore } from '@/store/useAppStore'
+import { useEffect } from 'react'
+import { ToastContainer } from '../components/ui/ToastContainer'
+import AIChatWidget from '../components/AIChat/AIChatWidget'
+
+export function Layout() {
+  const { theme } = useAppStore()
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [theme])
+
+  return (
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-background text-foreground transition-colors duration-300">
+      <TopNav />
+      <div className="flex flex-1 overflow-hidden relative">
+        <Sidebar />
+        <main className="flex-1 overflow-auto bg-background/50 relative">
+          <Outlet />
+        </main>
+        <RightPanel />
+      </div>
+      <AIChatWidget />
+      <ToastContainer />
+    </div>
+  )
+}

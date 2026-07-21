@@ -1,0 +1,42 @@
+services:
+  timescaledb:
+    image: timescale/timescaledb-ha:pg15-latest
+    environment:
+      - POSTGRES_DB=cctv
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://admin:admin@timescaledb:5432/cctv
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=super-secret-key-1234
+    depends_on:
+      - timescaledb
+      - redis
+    volumes:
+      - ./backend/snapshots:/app/snapshots
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  timescaledb_data:
