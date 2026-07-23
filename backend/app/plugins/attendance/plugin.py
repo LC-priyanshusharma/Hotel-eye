@@ -145,32 +145,15 @@ class AttendanceDetectionPlugin(BaseDetectionPlugin):
                                     logger.info(f"🚪 Employee {best_match_id} CHECKED OUT from {camera_id}")
                                     
                             if action:
-                                filename = f"attendance_{int(time.time())}_{uuid.uuid4().hex[:6]}.jpg"
-                                filepath = os.path.join("snapshots", filename)
-                                cv2.imwrite(filepath, frame)
-                                
                                 log_entry = {
                                     "employee": f"Emp {best_match_id}", 
                                     "action": action, 
                                     "time": timestamp,
-                                    "snapshot_file": filename
+                                    "snapshot_file": None
                                 }
                                 self.recent_logs.append(log_entry)
                                 
                                 drawings = []
-                                drawings.append({
-                                    "type": "rect",
-                                    "coords": [int(x1), int(y1), int(x2), int(y2)],
-                                    "color": [0, 255, 0] if action == "CHECK IN" else [255, 165, 0],
-                                    "thickness": 2
-                                })
-                                drawings.append({
-                                    "type": "text",
-                                    "text": f"{action}",
-                                    "coords": [int(x1), int(y1) - 10],
-                                    "color": [0, 255, 0] if action == "CHECK IN" else [255, 165, 0],
-                                    "scale": 0.7
-                                })
                                 
                                 event = DetectionEvent(
                                     plugin_name=self.plugin_name,
@@ -182,7 +165,7 @@ class AttendanceDetectionPlugin(BaseDetectionPlugin):
                                         "employee_id": best_match_id,
                                         "action": action,
                                         "drawings": drawings,
-                                        "snapshot_file": filename
+                                        "snapshot_file": None
                                     }
                                 )
                                 events.append(event)

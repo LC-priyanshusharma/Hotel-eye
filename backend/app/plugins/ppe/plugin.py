@@ -104,19 +104,6 @@ class PPEDetectionPlugin(BaseDetectionPlugin):
             self.last_alert_time[camera_id] = timestamp
             logger.warning(f"⚠️ Missing PPE Detected on {camera_id}! Count: {len(persons_without_ppe)}")
             
-            # Save Snapshot
-            os.makedirs("snapshots", exist_ok=True)
-            filename = f"ppe_{int(time.time())}_{uuid.uuid4().hex[:6]}.jpg"
-            filepath = os.path.join("snapshots", filename)
-            
-            # Draw on a copy of the frame to save
-            snapshot_frame = frame.copy()
-            for (px1, py1, px2, py2) in persons_without_ppe:
-                cv2.rectangle(snapshot_frame, (px1, py1), (px2, py2), (0, 0, 255), 2)
-                cv2.putText(snapshot_frame, "NO PPE", (px1, py1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-                
-            cv2.imwrite(filepath, snapshot_frame)
-
             event = DetectionEvent(
                 plugin_name=self.plugin_name,
                 event_type="PPE_MISSING",
@@ -126,7 +113,7 @@ class PPEDetectionPlugin(BaseDetectionPlugin):
                 metadata={
                     "persons_without_ppe": persons_without_ppe,
                     "drawings": drawings,
-                    "snapshot_file": filename
+                    "snapshot_file": None
                 }
             )
             events.append(event)

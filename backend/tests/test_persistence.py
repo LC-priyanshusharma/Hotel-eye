@@ -4,7 +4,7 @@ from database.persistence import DatabaseWorker
 
 def test_is_actionable():
     q = queue.Queue()
-    worker = DatabaseWorker(result_queue=q)
+    worker = DatabaseWorker()
     
     # 1. Actionable event (has active alerts)
     event1 = {

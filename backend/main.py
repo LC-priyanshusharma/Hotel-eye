@@ -62,13 +62,27 @@ def event_loop(result_queue: queue.Queue):
             # 2. Forward to Database worker via Redis
             # We only send metadata (events) over Redis to avoid massive memory/network bloat
             if packet.get("events"):
-                db_packet = {
-                    "camera_id": packet["camera_id"],
-                    "timestamp": packet["timestamp"],
-                    "events": packet["events"]
-                }
+                ignored_redis_events = {None, "info", "PERSON_COUNT", "PARKING_STATS", "QUEUE_STATS", "ATTENDANCE_STATE", "TAMPER_OK", "VISITOR_TRACK"}
                 
-                redis_client.xadd("logiceye:events", {"data": json.dumps(db_packet)})
+                filtered_events = []
+                for e in packet["events"]:
+                    e_type = getattr(e, "event_type", None)
+                    if e_type is None and isinstance(e, dict):
+                        e_type = e.get("event_type")
+                        
+                    if e_type not in ignored_redis_events:
+                        # Convert to dict if it's an object so json.dumps works flawlessly
+                        e_dict = e if isinstance(e, dict) else (e.dict() if hasattr(e, "dict") else e.__dict__)
+                        filtered_events.append(e_dict)
+                        
+                if filtered_events:
+                    db_packet = {
+                        "camera_id": packet["camera_id"],
+                        "timestamp": packet["timestamp"],
+                        "events": filtered_events
+                    }
+                    
+                    redis_client.xadd("logiceye:events", {"data": json.dumps(db_packet)})
                 
         except queue.Empty:
             continue

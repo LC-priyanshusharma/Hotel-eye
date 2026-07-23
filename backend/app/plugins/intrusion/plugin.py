@@ -71,13 +71,7 @@ class IntrusionDetectionPlugin(BaseDetectionPlugin):
                     if track_id not in self.known_intrusions[camera_id]:
                         self.known_intrusions[camera_id].add(track_id)
                         
-                        cam_slug = camera_id.replace("rtsp://", "").replace("/", "_").replace(":", "_").replace("@", "_")
-                        filename = f"intrusion_{cam_slug}_{track_id}_{int(timestamp)}.jpg"
-                        filepath = os.path.join("snapshots", filename)
-                        
-                        snapshot_frame = frame.copy()
-                        cv2.rectangle(snapshot_frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 0, 255), 3)
-                        cv2.imwrite(filepath, snapshot_frame)
+
                         
                         drawings = []
                         drawings.append({
@@ -100,7 +94,7 @@ class IntrusionDetectionPlugin(BaseDetectionPlugin):
                             camera_id=camera_id,
                             timestamp=timestamp,
                             confidence=1.0,
-                            snapshot_path=filepath,
+                            snapshot_path=None,
                             metadata={
                                 "track_id": track_id,
                                 "zone": zone_coords,

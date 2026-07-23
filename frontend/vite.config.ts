@@ -15,5 +15,18 @@ export default defineConfig({
   },
   define: {
     'process.env': {}
+  },
+  server: {
+    allowedHosts: true,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true
+      },
+      '/ws': {
+        target: 'ws://localhost:8000',
+        ws: true
+      }
+    }
   }
 })

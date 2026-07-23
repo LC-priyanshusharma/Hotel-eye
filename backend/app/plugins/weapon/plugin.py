@@ -52,15 +52,7 @@ class WeaponDetectionPlugin(BaseDetectionPlugin):
                     # Take snapshot immediately if it's a new weapon alert window (3 seconds debounce)
                     last_alert = self.active_alerts.get(camera_id, 0)
                     if timestamp - last_alert > 3.0:
-                        cam_slug = camera_id.replace("rtsp://", "").replace("/", "_").replace(":", "_").replace("@", "_")
-                        filename = f"weapon_{cam_slug}_{int(time.time())}.jpg"
-                        filepath = os.path.join("snapshots", filename)
-                        
-                        snapshot_frame = frame.copy()
-                        cv2.rectangle(snapshot_frame, (x1, y1), (x2, y2), (0, 165, 255), 3)
-                        cv2.putText(snapshot_frame, "WEAPON", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 165, 255), 2)
-                        cv2.imwrite(filepath, snapshot_frame)
-                        snapshots.append(filepath)
+                        snapshots.append(None)
                         
         if weapon_detected:
             last_alert = self.active_alerts.get(camera_id, 0)

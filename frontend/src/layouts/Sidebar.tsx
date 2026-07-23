@@ -1,4 +1,4 @@
-import { LayoutDashboard, Video, PlaySquare, AlertTriangle, BarChart2, Map, Users, Settings, LifeBuoy, Server, Database, ChevronLeft, ChevronRight, Trash2, Clock, Car, BadgeCheck, Flame } from 'lucide-react'
+import { LayoutDashboard, Video, PlaySquare, AlertTriangle, BarChart2, Map, Users, Settings, LifeBuoy, Server, Database, ChevronLeft, ChevronRight, Trash2, Clock, Car, BadgeCheck, Flame, UserCheck, UserPlus } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
 import { cn } from '@/utils/utils'
 import { Link, useLocation } from 'react-router-dom'
@@ -15,6 +15,9 @@ const navItems = [
   { icon: Car, label: 'Parking Analytics', path: '/parking' },
   { icon: BadgeCheck, label: 'Attendance', path: '/attendance' },
   { icon: Flame, label: 'Fire Detection', path: '/fire' },
+  { icon: Car, label: 'ANPR Analytics', path: '/anpr' },
+  { icon: UserCheck, label: 'Visitor Logs', path: '/visitor' },
+  { icon: UserPlus, label: 'Visitor DB', path: '/registered-visitors' },
   { icon: Map, label: 'Maps', path: '/maps' },
   { icon: Database, label: 'Storage', path: '/storage' },
   { icon: Server, label: 'AI Models', path: '/ai-models' },

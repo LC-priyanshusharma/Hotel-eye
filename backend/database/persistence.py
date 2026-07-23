@@ -10,6 +10,8 @@ from datetime import datetime, timezone, timedelta
 
 from database.session import SessionLocal, engine, Base
 from models.models import CameraEvent
+import app.plugins.visitor.models # Ensure visitor tables are registered
+import app.plugins.anpr.models # Ensure ANPR tables are registered
 from core.alert_engine import AlertEngine
 
 class DatabaseWorker:
@@ -45,6 +47,9 @@ class DatabaseWorker:
         self.is_running = True
         
         # Ensure tables exist (we will rely on Alembic for prod, but this is a failsafe)
+        with engine.connect() as conn:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+            conn.commit()
         Base.metadata.create_all(bind=engine)
         
         self._thread = threading.Thread(target=self._run, daemon=True, name="DatabaseWorker")
@@ -62,7 +67,7 @@ class DatabaseWorker:
         if not events:
             return False
             
-        ignored_events = {None, "info", "PERSON_COUNT", "PARKING_STATS", "QUEUE_STATS", "ATTENDANCE_STATE", "TAMPER_OK"}
+        ignored_events = {None, "info", "PERSON_COUNT", "PARKING_STATS", "QUEUE_STATS", "ATTENDANCE_STATE", "TAMPER_OK", "VISITOR_TRACK"}
             
         for plugin_name, data in events.items():
             if isinstance(data, dict):

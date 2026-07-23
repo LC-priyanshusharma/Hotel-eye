@@ -1,6 +1,6 @@
 services:
   timescaledb:
-    image: timescale/timescaledb-ha:pg15-latest
+    image: pgvector/pgvector:pg15
     environment:
       - POSTGRES_DB=cctv
       - POSTGRES_USER=admin

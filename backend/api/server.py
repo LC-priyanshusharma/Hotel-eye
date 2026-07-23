@@ -21,6 +21,7 @@ from app.plugins.queue.router import queue_router
 from app.plugins.parking.router import parking_router
 from app.plugins.attendance.router import attendance_router
 from app.plugins.fire.router import fire_router
+from app.plugins.visitor.router import router as visitor_router
 from app.auth.routes import router as auth_router
 from app.auth.admin_routes import admin_router
 from app.config_routes import config_router
@@ -35,6 +36,7 @@ app.include_router(queue_router)
 app.include_router(parking_router)
 app.include_router(attendance_router)
 app.include_router(fire_router)
+app.include_router(visitor_router, prefix="/api/plugins")
 
 app.add_middleware(
     CORSMiddleware,

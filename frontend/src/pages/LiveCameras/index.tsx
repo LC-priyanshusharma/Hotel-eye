@@ -26,7 +26,9 @@ export function LiveCameras() {
   
   const cameraIdsStr = useCameraStateStore(state => Object.keys(state.states).join(','))
   
-  const cameras = (cameraIdsStr ? cameraIdsStr.split(',') : []).map((camId, idx) => {
+  const cameras = (cameraIdsStr ? cameraIdsStr.split(',') : [])
+    .filter(camId => camId !== 'SYSTEM')
+    .map((camId, idx) => {
     let name = `Camera ${idx + 1}`
     if (camId.includes('.mp4')) name = 'Camera 1 Test Video'
     if (camId.includes('192.168.1.121')) name = 'Camera 2 Lobby'
@@ -63,17 +65,17 @@ export function LiveCameras() {
   }
 
   return (
-    <div className="flex h-full w-full bg-black overflow-hidden">
+    <div className="flex h-full w-full bg-transparent overflow-hidden">
       {/* Main Grid Area */}
       <div className="flex flex-col flex-1 overflow-hidden relative">
         {/* Toolbar */}
-        <div className="h-12 border-b border-border bg-background flex items-center justify-between px-4 shrink-0">
+        <div className="h-12 border-b border-white/5 bg-black/40 backdrop-blur-md flex items-center justify-between px-4 shrink-0 z-10">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-sm">View Configuration</span>
             {activeCameraId && (
               <button 
                 onClick={() => setActiveCamera(null)}
-                className="ml-4 px-3 py-1 bg-primary/20 text-primary border border-primary/50 text-xs font-bold rounded shadow hover:bg-primary hover:text-primary-foreground transition-colors"
+                className="ml-4 px-4 py-1.5 bg-primary/20 text-primary border border-primary/50 text-xs font-bold rounded-full shadow-[0_0_15px_rgba(124,58,237,0.3)] hover:bg-primary hover:text-white hover:shadow-[0_0_20px_rgba(124,58,237,0.6)] transition-all"
               >
                 ← Back to Grid
               </button>
@@ -81,7 +83,7 @@ export function LiveCameras() {
           </div>
           
           {!activeCameraId && (
-            <div className="flex bg-muted/50 p-1 rounded-lg border border-border">
+            <div className="flex bg-black/50 p-1 rounded-lg border border-white/10 shadow-inner backdrop-blur-sm">
             {PRESET_LAYOUTS.map((preset) => (
               <button
                 key={preset.id}

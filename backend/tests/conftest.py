@@ -14,8 +14,8 @@ from database.session import Base, get_async_db
 from models.auth import User, Role, Permission
 from app.auth.security import get_password_hash
 
-# Use in-memory SQLite for testing
-SQLALCHEMY_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+# Use PostgreSQL test database
+SQLALCHEMY_DATABASE_URL = "postgresql+asyncpg://admin:admin@localhost:5432/cctv_test"
 
 engine = create_async_engine(SQLALCHEMY_DATABASE_URL, echo=False)
 TestingSessionLocal = sessionmaker(

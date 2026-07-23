@@ -1,3 +1,5 @@
+
+
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Layout } from './layouts/Layout'
 import { Dashboard } from './pages/Dashboard'
@@ -8,6 +10,10 @@ import { QueueAnalytics } from './pages/QueueAnalytics'
 import { ParkingAnalytics } from './pages/ParkingAnalytics'
 import { AttendanceAnalytics } from './pages/AttendanceAnalytics'
 import { FireAnalytics } from './pages/FireAnalytics'
+import ANPRAnalytics from './pages/ANPRAnalytics';
+import VisitorAnalytics from './pages/VisitorAnalytics';
+import RegisteredVisitors from './pages/RegisteredVisitors';
+import VisitorRegistration from './pages/VisitorRegistration';
 import { Settings } from './pages/Settings'
 import { Login } from './pages/Login'
 import { AuthProvider } from './contexts/AuthContext'
@@ -29,6 +35,7 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<VisitorRegistration />} />
           
           <Route element={<ProtectedRoute />}>
             <Route path="/" element={<Layout />}>
@@ -41,6 +48,9 @@ function App() {
               <Route path="parking" element={<ParkingAnalytics />} />
               <Route path="attendance" element={<AttendanceAnalytics />} />
               <Route path="fire" element={<FireAnalytics />} />
+              <Route path="anpr" element={<ANPRAnalytics />} />
+              <Route path="visitor" element={<VisitorAnalytics />} />
+              <Route path="registered-visitors" element={<RegisteredVisitors />} />
               <Route path="maps" element={<div className="p-8 text-white"><h1 className="text-2xl font-bold">Maps Integration</h1><p className="text-muted-foreground mt-2">Facility mapping module is currently under construction.</p></div>} />
               <Route path="playback" element={<div className="p-8 text-white"><h1 className="text-2xl font-bold">NVR Playback</h1><p className="text-muted-foreground mt-2">Historical video playback module is currently under construction.</p></div>} />
               <Route path="settings" element={<Settings />} />

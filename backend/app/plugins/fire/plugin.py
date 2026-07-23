@@ -84,13 +84,6 @@ class FireDetectionPlugin(BaseDetectionPlugin):
             })
             
             
-            # Save Snapshot
-            import os
-            os.makedirs("snapshots", exist_ok=True)
-            filename = f"fire_{int(time.time())}_{uuid.uuid4().hex[:6]}.jpg"
-            filepath = os.path.join("snapshots", filename)
-            cv2.imwrite(filepath, frame)
-            
             event = DetectionEvent(
                 plugin_name=self.plugin_name,
                 event_type="FIRE_DETECTED",
@@ -100,7 +93,7 @@ class FireDetectionPlugin(BaseDetectionPlugin):
                 metadata={
                     "fire_boxes": fire_boxes,
                     "drawings": drawings,
-                    "snapshot_file": filename
+                    "snapshot_file": None
                 }
             )
             events.append(event)

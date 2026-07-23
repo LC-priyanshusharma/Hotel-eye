@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Activity } from 'lucide-react'
 import { cn } from '@/utils/utils'
+import { motion, AnimatePresence } from 'framer-motion'
 
 interface LiveEvent {
   id: string
@@ -66,13 +67,13 @@ export function LiveNotificationSidebar() {
   }, [])
 
   return (
-    <aside className="w-80 bg-[#0B0C10] border-l border-[#1F2833] shrink-0 flex flex-col h-full shadow-2xl relative z-10">
-      <div className="p-4 border-b border-[#1F2833] flex items-center justify-between shrink-0">
+    <aside className="w-80 bg-[#030014]/80 backdrop-blur-3xl border-l border-white/5 shrink-0 flex flex-col h-full shadow-[0_0_50px_rgba(124,58,237,0.15)] relative z-10">
+      <div className="p-4 border-b border-white/5 flex items-center justify-between shrink-0 bg-black/20">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-danger animate-pulse" />
-          <h2 className="text-sm font-bold tracking-widest text-[#45A29E] uppercase">Global Event Stream</h2>
+          <div className="w-2 h-2 rounded-full bg-danger animate-pulse shadow-[0_0_8px_rgba(244,63,94,0.8)]" />
+          <h2 className="text-sm font-bold tracking-widest text-primary uppercase">Global Event Stream</h2>
         </div>
-        <span className="text-[10px] text-white font-bold bg-[#1F2833] px-3 py-1 rounded-full uppercase tracking-wider">
+        <span className="text-[10px] text-white font-bold bg-white/10 px-3 py-1 rounded-full uppercase tracking-wider shadow-inner shadow-white/5">
           {events.length} Captured
         </span>
       </div>
@@ -84,17 +85,21 @@ export function LiveNotificationSidebar() {
             <span className="text-sm font-medium opacity-50">Awaiting Events...</span>
           </div>
         ) : (
-          events.map(event => (
-            <div 
-              key={event.id}
-              style={{ minHeight: '80px', display: 'flex', backgroundColor: 'rgba(31,40,51,0.5)', borderRadius: '12px', overflow: 'hidden' }}
-            >
+          <AnimatePresence initial={false}>
+            {events.map((event, i) => (
+              <motion.div 
+                key={event.id}
+                initial={{ opacity: 0, y: -20, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                className="min-h-[80px] flex rounded-xl overflow-hidden bg-black/40 border border-white/5 shadow-lg backdrop-blur-sm transition-all hover:bg-black/60 hover:border-white/10 group"
+              >
               <div className={cn(
                 "w-1 shrink-0",
-                event.type === 'danger' && "bg-danger",
-                event.type === 'warning' && "bg-warning",
-                event.type === 'success' && "bg-success",
-                event.type === 'info' && "bg-[#45A29E]"
+                event.type === 'danger' && "bg-danger shadow-[0_0_10px_rgba(244,63,94,0.5)]",
+                event.type === 'warning' && "bg-warning shadow-[0_0_10px_rgba(245,158,11,0.5)]",
+                event.type === 'success' && "bg-success shadow-[0_0_10px_rgba(16,185,129,0.5)]",
+                event.type === 'info' && "bg-primary shadow-[0_0_10px_rgba(124,58,237,0.5)]"
               )} />
               
               <div className="p-3 w-full flex flex-col justify-center">
@@ -105,7 +110,7 @@ export function LiveNotificationSidebar() {
                       event.type === 'danger' && "bg-danger",
                       event.type === 'warning' && "bg-warning",
                       event.type === 'success' && "bg-success",
-                      event.type === 'info' && "bg-[#45A29E]"
+                      event.type === 'info' && "bg-primary"
                     )} />
                     <span className="text-[10px] font-bold tracking-wider text-white">
                       {event.cameraName}
@@ -121,7 +126,7 @@ export function LiveNotificationSidebar() {
                   event.type === 'danger' && "text-danger",
                   event.type === 'warning' && "text-warning",
                   event.type === 'success' && "text-success",
-                  event.type === 'info' && "text-[#45A29E]"
+                  event.type === 'info' && "text-primary"
                 )}>
                   {event.category}
                 </div>
@@ -130,8 +135,9 @@ export function LiveNotificationSidebar() {
                   {event.title}
                 </div>
               </div>
-            </div>
-          ))
+            </motion.div>
+          ))}
+          </AnimatePresence>
         )}
       </div>
     </aside>

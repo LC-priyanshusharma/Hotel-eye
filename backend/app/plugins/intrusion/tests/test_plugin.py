@@ -14,13 +14,13 @@ class MockDetections:
     def __init__(self, boxes):
         self.boxes = boxes
 
-@patch("app.plugins.intrusion.plugin.config")
-def test_intrusion_plugin_no_crash(mock_config):
+def test_intrusion_plugin_no_crash():
+    mock_config = MagicMock()
     # Mock the zone to be a square from (0,0) to (100,100)
     mock_config.get_zone_for_camera.return_value = [[0, 0], [100, 0], [100, 100], [0, 100]]
     mock_config.LOITERING_THRESHOLD_SECONDS = 5.0
     
-    plugin = IntrusionDetectionPlugin()
+    plugin = IntrusionDetectionPlugin(app_config=mock_config)
     context = TrackerContext()
     
     # Person at 50, 50 (inside zone)

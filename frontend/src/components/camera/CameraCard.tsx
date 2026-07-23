@@ -26,13 +26,13 @@ export const CameraCard = memo(({ id, name, location }: any) => {
   return (
     <div 
       className={cn(
-        "w-full h-full relative group overflow-hidden rounded-xl bg-black shadow-md transition-all",
-        isActive ? "border-2 border-primary" : "border border-border"
+        "w-full h-full relative group overflow-hidden rounded-xl transition-all duration-500",
+        isActive ? "ring-2 ring-primary glow-primary border-transparent glass-pro" : "border border-border glass hover:border-primary/50"
       )}
       onClick={() => setActiveCamera(isActive ? null : id)}
     >
       {/* Top Overlay */}
-      <div className="absolute top-0 inset-x-0 p-3 bg-gradient-to-b from-black/80 to-transparent z-10 flex justify-between items-start pointer-events-none">
+      <div className="absolute top-0 inset-x-0 p-3 bg-gradient-to-b from-[#05011f]/90 via-[#05011f]/20 to-transparent z-10 flex justify-between items-start pointer-events-none">
         <div className="flex flex-col gap-2">
           <div className="flex flex-col gap-1">
             <span className="font-semibold text-sm text-white drop-shadow-md flex items-center gap-2">
@@ -110,7 +110,7 @@ export const CameraCard = memo(({ id, name, location }: any) => {
       <VideoPlayer cameraId={id} streamUrl="mock" poster="https://images.unsplash.com/photo-1577962917302-cd874c4e31d2?auto=format&fit=crop&q=80&w=640" />
 
       {/* Bottom Overlay */}
-      <div className="absolute bottom-0 inset-x-0 p-3 bg-gradient-to-t from-black/90 via-black/50 to-transparent z-10 flex justify-between items-end pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+      <div className="absolute bottom-0 inset-x-0 p-3 bg-gradient-to-t from-[#05011f]/90 via-[#05011f]/40 to-transparent z-10 flex justify-between items-end pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300">
         <div className="flex gap-4 text-[10px] text-gray-300 font-mono">
           <span className="flex flex-col"><span>FPS</span><strong className="text-white">30</strong></span>
           <span className="flex flex-col"><span>LATENCY</span><strong className="text-white">45ms</strong></span>
@@ -136,12 +136,12 @@ export const CameraCard = memo(({ id, name, location }: any) => {
           { icon: PictureInPicture, label: 'PIP', action: () => addToast({ title: 'Picture-in-Picture', message: 'Feature coming soon.', type: 'default' }) },
           { icon: Settings, label: 'Settings', action: () => addToast({ title: 'Hardware Error', message: 'Hardware not supported by this camera model.', type: 'danger' }) }
         ].map((btn, i) => (
-          <button key={i} onClick={(e) => { e.stopPropagation(); btn.action(e); }} className="p-2 bg-black/60 hover:bg-primary backdrop-blur-sm border border-white/10 rounded-lg text-white/80 hover:text-white transition-all group/btn relative">
+          <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} key={i} onClick={(e) => { e.stopPropagation(); btn.action(e); }} className="p-2 bg-black/60 hover:bg-primary backdrop-blur-sm border border-white/10 rounded-lg text-white/80 hover:text-white transition-all shadow-lg group/btn relative">
             <btn.icon className="w-4 h-4" />
             <span className="absolute right-full mr-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-black/80 text-[10px] rounded opacity-0 group-hover/btn:opacity-100 pointer-events-none whitespace-nowrap">
               {btn.label}
             </span>
-          </button>
+          </motion.button>
         ))}
       </motion.div>
     </div>

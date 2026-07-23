@@ -74,18 +74,6 @@ class GarbageDetectionService:
                         
                         category_name = GARBAGE_CLASS_NAMES.get(int(cls_id), "unknown garbage")
                         
-                        # Capture Snapshot
-                        safe_cam = camera_id.replace("://", "_").replace("/", "_")
-                        filename = f"garbage_{safe_cam}_{track_id}_{int(timestamp)}.jpg"
-                        filepath = os.path.join("snapshots/garbage", filename)
-                        
-                        # Draw bounding box
-                        snap = frame.copy()
-                        cv2.rectangle(snap, (int(x1), int(y1)), (int(x2), int(y2)), (0, 0, 255), 3)
-                        cv2.putText(snap, f"{category_name} {conf:.2f}", (int(x1), int(y1)-10), 
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,255), 2)
-                        cv2.imwrite(filepath, snap)
-                        
                         event = DetectionEvent(
                             plugin_name="GarbageDetectionPlugin",
                             event_type="GARBAGE_DETECTED",
@@ -93,7 +81,7 @@ class GarbageDetectionService:
                             timestamp=timestamp,
                             confidence=float(conf),
                             metadata={"category": category_name, "duration_seconds": dwell_time},
-                            snapshot_path=filepath
+                            snapshot_path=None
                         )
                         events.append(event)
                         logger.warning(f"🗑️ Garbage Alert: {category_name} detected for {dwell_time:.1f}s on {camera_id}")

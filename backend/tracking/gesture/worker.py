@@ -100,11 +100,7 @@ class GestureWorker:
                         logger.info("Triggering HAND_RAISE_DETECTED event!")
                         last_hand_raise_time = current_time
                         active_alerts.append("HAND_RAISE_DETECTED")
-                        import cv2
-                        import uuid
-                        filename = f"snapshots/hand_raise_{int(time.time())}_{uuid.uuid4().hex[:6]}.jpg"
-                        cv2.imwrite(filename, frame)
-                        snapshot_file = filename
+                        snapshot_file = None
 
                 gesture_plugin_data = {
                     "has_critical_alert": False,
