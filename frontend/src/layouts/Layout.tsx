@@ -19,11 +19,11 @@ export function Layout() {
   }, [theme])
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-background text-foreground transition-colors duration-300">
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-background text-foreground transition-colors duration-300 relative">
       <TopNav />
-      <div className="flex flex-1 overflow-hidden relative">
+      <div className="flex flex-1 overflow-hidden relative z-10">
         <Sidebar />
-        <main className="flex-1 overflow-auto bg-background/50 relative">
+        <main className="flex-1 overflow-auto bg-transparent relative z-0">
           <Outlet />
         </main>
         <RightPanel />

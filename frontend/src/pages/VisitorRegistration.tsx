@@ -7,6 +7,10 @@ export const VisitorRegistration = () => {
   const [formData, setFormData] = useState({ name: '', email: '' });
   const [photos, setPhotos] = useState({ front: '', left: '', right: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const searchParams = new URLSearchParams(window.location.search);
+  const roleParam = searchParams.get('role');
+  const role = roleParam && roleParam.toLowerCase() === 'employee' ? 'EMPLOYEE' : 'VISITOR';
+  
   const [isSuccess, setIsSuccess] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -57,6 +61,7 @@ export const VisitorRegistration = () => {
       await axios.post('/api/plugins/visitor/register', {
         name: formData.name,
         email: formData.email,
+        role: role,
         photo_front: photos.front,
         photo_left: photos.left,
         photo_right: photos.right
@@ -94,7 +99,9 @@ export const VisitorRegistration = () => {
       <div className="p-8 z-10 flex-1 flex flex-col">
         <div className="mb-10 text-center">
           <h1 className="text-3xl font-extrabold mb-2 tracking-tight">Welcome to LogicEye</h1>
-          <p className="text-zinc-400 font-medium">Visitor Self-Registration</p>
+          <p className="text-zinc-400 font-medium">
+            {role === 'EMPLOYEE' ? 'Employee Self-Registration' : 'Visitor Self-Registration'}
+          </p>
         </div>
 
         {step === 1 && (

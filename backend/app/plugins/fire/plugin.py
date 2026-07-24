@@ -49,9 +49,7 @@ class FireDetectionPlugin(BaseDetectionPlugin):
                 x, y, w, h = cv2.boundingRect(c)
                 fire_boxes.append([x, y, x+w, y+h])
                 
-        # Store state globally for Smoke plugin to read
-        tracker_context.get_state(self.plugin_name, camera_id)["fire_detected"] = fire_detected
-                
+
         if fire_detected:
             last_alert = self.active_alerts.get(camera_id, 0)
             if timestamp - last_alert > 3.0: # Debounce 3s

@@ -1,5 +1,5 @@
+import React, { memo } from 'react'
 import { VideoOff } from 'lucide-react'
-import { memo } from 'react'
 
 export interface VideoPlayerProps {
   streamUrl?: string
@@ -10,8 +10,8 @@ export interface VideoPlayerProps {
 }
 
 export const VideoPlayer = memo(({ cameraId, poster, loading, error }: VideoPlayerProps) => {
-  // The backend MJPEG proxy endpoint
-  const streamEndpoint = `http://localhost:8000/video?camera_id=${encodeURIComponent(cameraId)}`
+  // Use relative path so the Vite proxy handles it and it works over Cloudflare Tunnel
+  const streamEndpoint = `/video?camera_id=${encodeURIComponent(cameraId)}`
 
   if (error) {
     return (
@@ -31,9 +31,22 @@ export const VideoPlayer = memo(({ cameraId, poster, loading, error }: VideoPlay
     )
   }
 
+  const imgRef = React.useRef<HTMLImageElement>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (imgRef.current) {
+        // Aggressively clear the src so the browser kills the MJPEG stream socket
+        // Freeing up the 6-connection limit per domain instantly!
+        imgRef.current.src = "";
+      }
+    }
+  }, []);
+
   return (
     <div className="w-full h-full relative bg-black">
       <img 
+        ref={imgRef}
         src={streamEndpoint} 
         alt={`Live Feed ${cameraId}`} 
         className="w-full h-full object-cover"

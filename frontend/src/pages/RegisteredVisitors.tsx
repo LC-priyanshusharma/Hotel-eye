@@ -18,7 +18,28 @@ interface VisitorProfile {
 
 export default function RegisteredVisitors() {
   const [profiles, setProfiles] = useState<VisitorProfile[]>([]);
-  const [showQrModal, setShowQrModal] = useState(false);
+  const [showQrModal, setShowQrModal] = useState<boolean>(false);
+  const currentRole = 'VISITOR';
+  const [safeUrl, setSafeUrl] = useState((import.meta.env.VITE_PUBLIC_URL || window.location.origin).replace(/\/+$/, ''));
+
+  useEffect(() => {
+    const fetchIp = async () => {
+      try {
+        const res = await axios.get('/api/system/ip');
+        if (res.data && res.data.ip) {
+          const port = window.location.port ? `:${window.location.port}` : '';
+          const protocol = window.location.protocol;
+          // Only replace if currently on localhost/127.0.0.1 AND no public URL is configured
+          if (!import.meta.env.VITE_PUBLIC_URL && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+            setSafeUrl(`${protocol}//${res.data.ip}${port}`);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to fetch system IP", e);
+      }
+    };
+    fetchIp();
+  }, []);
   
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -29,9 +50,9 @@ export default function RegisteredVisitors() {
   const [total, setTotal] = useState(0);
   const limit = 50;
   
-  const fetchProfiles = useCallback(async (currentPage: number = page) => {
+  const fetchProfiles = useCallback(async (currentPage: number = page, role: string = currentRole) => {
     try {
-      const res = await axios.get(`/api/plugins/visitor?page=${currentPage}&limit=${limit}`);
+      const res = await axios.get(`/api/plugins/visitor?page=${currentPage}&limit=${limit}&role=${role}`);
       setProfiles(res.data.data);
       setTotal(res.data.total);
     } catch (error) {
@@ -43,7 +64,7 @@ export default function RegisteredVisitors() {
 
   useEffect(() => {
     // Fetch initial data
-    fetchProfiles(1);
+    fetchProfiles(1, currentRole);
 
     // Connect WebSocket to listen for new registrations in real-time
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -54,7 +75,7 @@ export default function RegisteredVisitors() {
       Object.values(data).forEach((camData: any) => {
         if (camData.events && camData.events.VisitorPlugin) {
           camData.events.VisitorPlugin.forEach((ev: any) => {
-            if (ev.event_type === 'NEW_VISITOR_REGISTERED') {
+            if (ev.event_type === 'VISITOR_REGISTERED') {
               shouldRefresh = true;
             }
           });
@@ -62,11 +83,13 @@ export default function RegisteredVisitors() {
       });
       if (shouldRefresh) {
         // Fetch fresh profiles list to ensure we have the photo and correct DB fields
-        fetchProfiles();
+        fetchProfiles(page, currentRole);
       }
     };
     return () => ws.current?.close();
-  }, [fetchProfiles]);
+  }, [fetchProfiles, page, currentRole]);
+
+
 
   const filteredProfiles = profiles.filter(p => {
     if (!startDate && !endDate) return true;
@@ -112,11 +135,12 @@ export default function RegisteredVisitors() {
 
   return (
     <div className="p-6 min-h-screen text-white relative z-10">
-      <h1 className="text-3xl font-bold mb-6 bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent drop-shadow-sm">
-        Visitor Database
-      </h1>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent drop-shadow-sm">
+          Visitor Database
+        </h1>
+      </div>
       
-      {/* Registered Visitors DB */}
       <div className="glass-pro p-6 rounded-2xl">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
           <h2 className="text-xl font-semibold text-primary">Registered Visitors</h2>
@@ -148,12 +172,15 @@ export default function RegisteredVisitors() {
               </button>
             )}
             
-            <button 
-              onClick={() => setShowQrModal(true)}
-              className="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg text-sm font-medium transition shadow-lg shadow-indigo-900/50 flex items-center gap-2"
-            >
-              <QrCode className="w-4 h-4" /> QR Registration
-            </button>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setShowQrModal(true)}
+                className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg hover:from-indigo-400 hover:to-purple-500 transition-all font-medium shadow-[0_0_20px_rgba(99,102,241,0.3)] hover:shadow-[0_0_30px_rgba(99,102,241,0.5)] border border-white/10"
+              >
+                <QrCode className="w-4 h-4" />
+                Generate Visitor QR
+              </button>
+            </div>
           </div>
         </div>
         <div className="overflow-x-auto">
@@ -162,7 +189,7 @@ export default function RegisteredVisitors() {
               <tr className="border-b border-gray-800 text-gray-400 text-sm">
                 <th className="pb-3 pl-2 font-medium">Profile</th>
                 <th className="pb-3 font-medium">Email</th>
-                <th className="pb-3 font-medium">Visitor ID</th>
+                <th className="pb-3 font-medium">ID</th>
                 <th className="pb-3 font-medium text-right pr-2">Registration Time</th>
               </tr>
             </thead>
@@ -255,52 +282,57 @@ export default function RegisteredVisitors() {
         )}
       </div>
       
-      {showQrModal && (() => {
-        const safeUrl = (import.meta.env.VITE_PUBLIC_URL || window.location.origin).replace(/\/+$/, '');
-        return (
+      {showQrModal && (
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-4"
+        >
           <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-4"
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="glass-pro rounded-2xl w-full max-w-md overflow-hidden glow-primary"
           >
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="glass-pro rounded-2xl w-full max-w-md overflow-hidden glow-primary"
-            >
-              <div className="p-4 border-b border-white/10 flex justify-between items-center bg-black/40">
-                <h3 className="font-semibold text-lg text-white flex items-center gap-2"><QrCode className="w-5 h-5 text-primary" /> Public Registration QR</h3>
-                <button onClick={() => setShowQrModal(false)} className="text-muted-foreground hover:text-white transition bg-white/5 hover:bg-white/10 p-1.5 rounded-full">
-                  <X className="w-5 h-5" />
-                </button>
+            <div className="p-4 border-b border-white/10 flex justify-between items-center bg-black/40">
+              <h3 className="font-semibold text-lg text-white flex items-center gap-2"><QrCode className="w-5 h-5 text-primary" /> Visitor Registration QR</h3>
+              <button onClick={() => setShowQrModal(false)} className="text-muted-foreground hover:text-white transition bg-white/5 hover:bg-white/10 p-1.5 rounded-full">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-8 flex flex-col items-center">
+              <div className="bg-white p-5 rounded-2xl mb-6 shadow-2xl shadow-primary/20 ring-4 ring-primary/20">
+                <QRCodeSVG value={`${safeUrl}/register?role=visitor`} size={220} />
               </div>
-              <div className="p-8 flex flex-col items-center">
-                <div className="bg-white p-5 rounded-2xl mb-6 shadow-2xl shadow-primary/20 ring-4 ring-primary/20">
-                  <QRCodeSVG value={`${safeUrl}/register`} size={220} />
+              <p className="text-gray-300 text-center mb-6 text-sm font-medium">
+                Scan this QR code to access the Self-Registration portal for Visitors.
+              </p>
+              <div className="w-full mt-2">
+                <label className="block text-[10px] font-bold text-primary mb-2 uppercase tracking-widest">Direct Registration Link</label>
+                <div className="flex bg-black/50 border border-white/10 rounded-lg overflow-hidden focus-within:border-primary transition-colors">
+                  <input 
+                    type="text" 
+                    readOnly 
+                    value={`${safeUrl}/register?role=visitor`}
+                    className="w-full bg-transparent border-none text-xs text-gray-300 font-mono focus:outline-none p-2"
+                  />
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${safeUrl}/register?role=visitor`);
+                    }}
+                    className="bg-primary/20 hover:bg-primary/30 text-primary px-3 transition-colors flex items-center justify-center border-l border-white/10"
+                  >
+                    Copy
+                  </button>
                 </div>
-                <p className="text-gray-300 text-center mb-6 text-sm font-medium">
-                  Scan this QR code to access the Self-Registration mobile app.
+                <p className="text-xs text-gray-500 mt-2">
+                  Print the QR code above or share this link with visitors.
                 </p>
-                <div className="w-full mt-2">
-                  <label className="block text-[10px] font-bold text-primary mb-2 uppercase tracking-widest">Direct Registration Link</label>
-                  <div className="flex bg-black/50 border border-white/10 rounded-lg overflow-hidden focus-within:border-primary transition-colors">
-                    <input 
-                      type="text" 
-                      readOnly
-                      value={`${safeUrl}/register`}
-                      className="w-full bg-transparent px-4 py-3 text-sm text-gray-200 focus:outline-none"
-                    />
-                  </div>
-                  <p className="text-xs text-gray-500 mt-2">
-                    Print the QR code above or share this link with visitors.
-                  </p>
-                </div>
               </div>
-            </motion.div>
+            </div>
           </motion.div>
-        );
-      })()}
+        </motion.div>
+      )}
     </div>
   );
 }

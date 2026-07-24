@@ -8,13 +8,12 @@ class VisitorBase(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     photo: Optional[str] = None
+    role: Optional[str] = "VISITOR"
 
 class VisitorCreate(VisitorBase):
     pass
 
-class VisitorRegisterRequest(BaseModel):
-    name: str
-    email: str
+class VisitorRegisterRequest(VisitorBase):
     photo_front: str # Base64 image
     photo_left: str # Base64 image
     photo_right: str # Base64 image

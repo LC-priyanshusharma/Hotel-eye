@@ -1,18 +1,19 @@
 
 
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Layout } from './layouts/Layout'
 import { Dashboard } from './pages/Dashboard'
 import { LiveCameras } from './pages/LiveCameras'
 import { Analytics, Events } from './pages/EventsAndAnalytics'
-import { GarbageAnalytics } from './pages/GarbageAnalytics'
-import { QueueAnalytics } from './pages/QueueAnalytics'
+
 import { ParkingAnalytics } from './pages/ParkingAnalytics'
 import { AttendanceAnalytics } from './pages/AttendanceAnalytics'
 import { FireAnalytics } from './pages/FireAnalytics'
 import ANPRAnalytics from './pages/ANPRAnalytics';
 import VisitorAnalytics from './pages/VisitorAnalytics';
 import RegisteredVisitors from './pages/RegisteredVisitors';
+import EmployeeDirectory from './pages/EmployeeDirectory';
 import VisitorRegistration from './pages/VisitorRegistration';
 import { Settings } from './pages/Settings'
 import { Login } from './pages/Login'
@@ -21,6 +22,17 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 
 import { useEffect } from 'react'
 import { useCameraStateStore } from './store/useCameraStateStore'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      gcTime: 1000 * 60 * 30, // 30 minutes
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+})
 
 function App() {
   const connect = useCameraStateStore(state => state.connect)
@@ -31,8 +43,9 @@ function App() {
   }, [])
 
   return (
-    <AuthProvider>
-      <BrowserRouter>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<VisitorRegistration />} />
@@ -43,16 +56,15 @@ function App() {
               <Route path="cameras" element={<LiveCameras />} />
               <Route path="events" element={<Events />} />
               <Route path="analytics" element={<Analytics />} />
-              <Route path="garbage" element={<GarbageAnalytics />} />
-              <Route path="queue" element={<QueueAnalytics />} />
+
               <Route path="parking" element={<ParkingAnalytics />} />
               <Route path="attendance" element={<AttendanceAnalytics />} />
               <Route path="fire" element={<FireAnalytics />} />
               <Route path="anpr" element={<ANPRAnalytics />} />
               <Route path="visitor" element={<VisitorAnalytics />} />
-              <Route path="registered-visitors" element={<RegisteredVisitors />} />
-              <Route path="maps" element={<div className="p-8 text-white"><h1 className="text-2xl font-bold">Maps Integration</h1><p className="text-muted-foreground mt-2">Facility mapping module is currently under construction.</p></div>} />
-              <Route path="playback" element={<div className="p-8 text-white"><h1 className="text-2xl font-bold">NVR Playback</h1><p className="text-muted-foreground mt-2">Historical video playback module is currently under construction.</p></div>} />
+              <Route path="visitor-db" element={<RegisteredVisitors />} />
+              <Route path="employee-db" element={<EmployeeDirectory />} />
+
               <Route path="settings" element={<Settings />} />
             </Route>
           </Route>
@@ -61,6 +73,7 @@ function App() {
         </Routes>
       </BrowserRouter>
     </AuthProvider>
+    </QueryClientProvider>
   )
 }
 

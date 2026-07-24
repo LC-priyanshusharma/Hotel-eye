@@ -3,8 +3,9 @@ import { Responsive, WidthProvider } from 'react-grid-layout/legacy'
 import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
 import { CameraCard } from '@/components/camera/CameraCard'
-import { LayoutGrid, Grid3X3, Grid2X2, Grid, LayoutTemplate } from 'lucide-react'
+import { LayoutGrid, Grid3X3, Grid2X2, Grid, LayoutTemplate, Plus, X } from 'lucide-react'
 import { cn } from '@/utils/utils'
+import { api } from '@/api/api'
 import { LiveNotificationSidebar } from './LiveNotificationSidebar'
 
 const ResponsiveGridLayout = WidthProvider(Responsive)
@@ -25,14 +26,62 @@ export function LiveCameras() {
   const { activeCameraId, setActiveCamera } = useAppStore()
   
   const cameraIdsStr = useCameraStateStore(state => Object.keys(state.states).join(','))
+  const [backendCameras, setBackendCameras] = useState<{id: string, name: string, rtsp_url: string}[]>([])
+  const [isAddingCamera, setIsAddingCamera] = useState(false)
+  const [cameraName, setCameraName] = useState('')
+  const [rtspUrl, setRtspUrl] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const fetchCameras = () => {
+    fetch('/api/cameras')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.status === 'success' && Array.isArray(data.cameras)) {
+          setBackendCameras(data.cameras)
+        }
+      })
+      .catch(err => console.error("Failed to fetch active cameras", err))
+  }
+
+  useEffect(() => {
+    fetchCameras()
+  }, [])
   
-  const cameras = (cameraIdsStr ? cameraIdsStr.split(',') : [])
+  const handleAddCamera = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!cameraName || !rtspUrl) return
+
+    setIsSubmitting(true)
+    try {
+      const res = await api.post('/api/cameras', { name: cameraName, rtsp_url: rtspUrl })
+      if (res.status === 200) {
+        fetchCameras()
+        setCameraName('')
+        setRtspUrl('')
+        setIsAddingCamera(false)
+      }
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+  
+  const allCameraIds = Array.from(new Set([...(cameraIdsStr ? cameraIdsStr.split(',') : []), ...backendCameras.map(c => c.rtsp_url)]))
+  
+  const cameras = allCameraIds
     .filter(camId => camId !== 'SYSTEM')
     .map((camId, idx) => {
-    let name = `Camera ${idx + 1}`
-    if (camId.includes('.mp4')) name = 'Camera 1 Test Video'
-    if (camId.includes('192.168.1.121')) name = 'Camera 2 Lobby'
-    if (camId.includes('192.168.1.122')) name = 'Camera 3 Room'
+    const dbCam = backendCameras.find(c => c.rtsp_url === camId)
+    let name = dbCam ? dbCam.name : `Camera ${idx + 1}`
+    
+    if (!dbCam) {
+      if (camId.includes('hlo.mp4')) name = 'ANPR Camera'
+      else if (camId.includes('.mp4')) name = 'Camera 1 Test Video'
+      if (camId.includes('192.168.1.121')) name = 'Camera 2 Lobby'
+      if (camId.includes('192.168.1.122')) name = 'Camera 3 Room'
+    }
+    
     return {
       id: camId,
       name
@@ -69,37 +118,46 @@ export function LiveCameras() {
       {/* Main Grid Area */}
       <div className="flex flex-col flex-1 overflow-hidden relative">
         {/* Toolbar */}
-        <div className="h-12 border-b border-white/5 bg-black/40 backdrop-blur-md flex items-center justify-between px-4 shrink-0 z-10">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-sm">View Configuration</span>
+        <div className="h-14 glass-panel border-b border-white/5 flex items-center justify-between px-6 shrink-0 z-10">
+          <div className="flex items-center gap-3">
+            <span className="font-bold text-sm tracking-widest uppercase text-foreground drop-shadow-md">NVR Grid Control</span>
             {activeCameraId && (
               <button 
                 onClick={() => setActiveCamera(null)}
-                className="ml-4 px-4 py-1.5 bg-primary/20 text-primary border border-primary/50 text-xs font-bold rounded-full shadow-[0_0_15px_rgba(124,58,237,0.3)] hover:bg-primary hover:text-white hover:shadow-[0_0_20px_rgba(124,58,237,0.6)] transition-all"
+                className="ml-4 px-4 py-1.5 bg-primary/10 text-primary border border-primary/30 text-xs font-bold rounded-full shadow-[0_0_15px_rgba(0,112,243,0.1)] hover:bg-primary hover:text-white hover:shadow-[0_0_20px_rgba(0,112,243,0.4)] hover-lift transition-all"
               >
-                ← Back to Grid
+                ← Return to Grid
               </button>
             )}
           </div>
           
           {!activeCameraId && (
-            <div className="flex bg-black/50 p-1 rounded-lg border border-white/10 shadow-inner backdrop-blur-sm">
-            {PRESET_LAYOUTS.map((preset) => (
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setIsAddingCamera(true)}
+                className="flex items-center gap-2 px-4 py-1.5 bg-primary/20 hover:bg-primary/40 text-primary hover:text-white rounded-lg text-xs font-bold transition-all border border-primary/30 glow-primary hover-lift"
+              >
+                <Plus className="w-4 h-4" /> Add Stream
+              </button>
+              
+              <div className="flex bg-[#0A0A0A]/60 p-1.5 rounded-xl border border-white/10 shadow-inner backdrop-blur-md gap-1">
+              {PRESET_LAYOUTS.map((preset) => (
               <button
                 key={preset.id}
                 onClick={() => handleLayoutChange(preset)}
                 className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
                   activeLayout.id === preset.id 
-                    ? "bg-primary text-primary-foreground shadow-sm" 
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    ? "bg-primary text-white shadow-md glow-primary" 
+                    : "text-muted-foreground hover:text-white hover:bg-white/5"
                 )}
                 title={preset.label}
               >
                 <preset.icon className="w-4 h-4" />
-                <span className="hidden sm:inline">{preset.label}</span>
+                <span className="hidden sm:inline uppercase tracking-wider text-[10px]">{preset.label}</span>
               </button>
             ))}
+            </div>
           </div>
           )}
         </div>
@@ -136,6 +194,58 @@ export function LiveCameras() {
           </ResponsiveGridLayout>
           )}
         </div>
+        
+        {/* Add Camera Modal Overlay */}
+        {isAddingCamera && (
+          <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="glass-pro rounded-2xl p-8 w-full max-w-md shadow-2xl relative border border-white/10">
+              <button 
+                onClick={() => setIsAddingCamera(false)}
+                className="absolute top-4 right-4 text-muted-foreground hover:text-white bg-white/5 p-2 rounded-full transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              
+              <h3 className="font-extrabold text-xl text-white mb-2 tracking-tight">Add Video Stream</h3>
+              <p className="text-sm text-muted-foreground mb-8">Connect a new RTSP stream or upload a test video source.</p>
+              
+              <form onSubmit={handleAddCamera} className="space-y-6">
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-medium text-foreground">Camera Name</label>
+                  <input 
+                    type="text" 
+                    value={cameraName}
+                    onChange={(e) => setCameraName(e.target.value)}
+                    placeholder="e.g. Front Gate" 
+                    className="bg-muted/30 border border-border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 w-full" 
+                    required
+                  />
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-medium text-foreground">RTSP URL</label>
+                  <input 
+                    type="text" 
+                    value={rtspUrl}
+                    onChange={(e) => setRtspUrl(e.target.value)}
+                    placeholder="rtsp://admin:pass@192.168.1.100/stream" 
+                    className="bg-muted/30 border border-border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 w-full font-mono text-sm" 
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">Credentials containing special characters will be automatically encoded.</p>
+                </div>
+
+                <button 
+                  type="submit" 
+                  disabled={isSubmitting}
+                  className="w-full flex justify-center items-center gap-2 px-6 py-2.5 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20 disabled:opacity-50 mt-2"
+                >
+                  <Plus className="w-4 h-4" /> {isSubmitting ? 'Connecting...' : 'Add Camera'}
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
       
       {/* Right Side Notification Panel */}

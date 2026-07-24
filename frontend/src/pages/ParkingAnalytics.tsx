@@ -10,7 +10,7 @@ export function ParkingAnalytics() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch('http://localhost:8000/api/parking/stats', {
+        const res = await fetch('/api/parking/stats', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           }
@@ -41,8 +41,8 @@ export function ParkingAnalytics() {
     <div className="p-8 h-full overflow-y-auto">
       <div className="flex justify-between items-end mb-8">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight mb-1 text-white">Parking Analytics</h1>
-          <p className="text-muted-foreground">Live occupancy tracking across defined parking zones.</p>
+          <h1 className="text-4xl font-extrabold tracking-tight mb-2 text-gradient">Parking Analytics</h1>
+          <p className="text-muted-foreground font-medium tracking-wide">Live occupancy tracking across defined parking zones.</p>
         </div>
       </div>
 
@@ -59,22 +59,23 @@ export function ParkingAnalytics() {
             return (
               <motion.div 
                 key={camId}
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.1 }}
-                className="glass rounded-2xl border border-white/5 overflow-hidden flex flex-col group"
+                transition={{ type: 'spring', stiffness: 300, damping: 20, delay: i * 0.1 }}
+                whileHover={{ y: -5, scale: 1.01 }}
+                className="glass-pro rounded-3xl border border-white/5 overflow-hidden flex flex-col group cursor-pointer transition-all duration-300"
               >
                 {/* Header Graphic */}
-                <div className="h-24 bg-muted relative flex items-center justify-between px-6">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl -mr-10 -mt-10" />
+                <div className="h-28 bg-black/40 relative flex items-center justify-between px-8 border-b border-white/5">
+                  <div className="absolute top-0 right-0 w-48 h-48 bg-primary/20 rounded-full blur-[50px] group-hover:opacity-100 opacity-50 transition-opacity pointer-events-none -mr-16 -mt-16" />
                   <div className="flex flex-col relative z-10">
-                    <span className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-1">Camera</span>
-                    <span className="text-lg font-bold text-white truncate max-w-[150px]" title={camId}>
+                    <span className="text-[10px] font-bold text-primary uppercase tracking-widest mb-1">Camera Stream</span>
+                    <span className="text-xl font-black text-white truncate max-w-[150px] drop-shadow-md" title={camId}>
                       {camId.split('/').pop() || camId}
                     </span>
                   </div>
-                  <div className="relative z-10 w-16 h-16 rounded-full bg-black/40 border border-white/10 flex items-center justify-center">
-                    <Car className={cn("w-7 h-7", utilization > 90 ? "text-danger" : "text-primary")} />
+                  <div className="relative z-10 w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center shadow-lg backdrop-blur-md group-hover:scale-110 transition-transform">
+                    <Car className={cn("w-6 h-6", utilization > 90 ? "text-danger" : "text-primary")} />
                   </div>
                 </div>
                 

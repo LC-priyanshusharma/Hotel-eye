@@ -6,15 +6,13 @@ from typing import Dict, Any, Optional
 import cv2
 import numpy as np
 
-try:
-    import mediapipe as mp
-except ImportError:
-    mp = None
-
 from config.config import config
-from face.detector import FaceDetector
+from detection.face_factory import FaceFactory
+from detection.interfaces.face import IFaceEngine
+from core.observer import IFrameObserver
+from app.engine.base import FrameData
 
-class FaceWorker:
+class FaceWorker(IFrameObserver):
     """
     Dedicated background worker for Face Recognition.
     Reads frames from a thread-safe queue and processes them asynchronously
@@ -30,9 +28,7 @@ class FaceWorker:
         self.latest_results: Dict[str, Any] = {}
         self.results_lock = threading.Lock()
         
-        # Detector is initialized inside the thread to avoid context issues
-        self.detector: Optional[FaceDetector] = None
-        self.mp_face_mesh = None
+        self.detector: Optional[IFaceEngine] = None
 
     def start(self):
         if self.is_running:
@@ -49,16 +45,9 @@ class FaceWorker:
         logger.info("FaceWorker thread stopped.")
 
     def _run(self):
-        logger.info("Initializing FaceDetector inside worker thread...")
+        logger.info("Initializing IFaceEngine inside worker thread...")
         try:
-            self.detector = FaceDetector(model_name='buffalo_s')
-            if mp:
-                self.mp_face_mesh = mp.solutions.face_mesh.FaceMesh(
-                    max_num_faces=5,
-                    refine_landmarks=True,
-                    min_detection_confidence=0.5,
-                    min_tracking_confidence=0.5
-                )
+            self.detector = FaceFactory.create(config.FACE_BACKEND)
         except Exception as e:
             logger.error(f"FaceDetector failed to initialize: {e}")
             self.is_running = False
@@ -85,39 +74,11 @@ class FaceWorker:
                 # Process frame for embeddings
                 faces = self.detector.detect_and_extract(frame)
                 
-                # Process for fatigue metrics using MediaPipe
-                fatigue_metrics = []
-                if self.mp_face_mesh:
-                    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    h, w, _ = frame.shape
-                    results = self.mp_face_mesh.process(rgb_frame)
-                    
-                    if results.multi_face_landmarks:
-                        for landmarks in results.multi_face_landmarks:
-                            # EAR indices
-                            left_eye = [362, 385, 387, 263, 373, 380]
-                            right_eye = [33, 160, 158, 133, 153, 144]
-                            mouth = [78, 81, 13, 308, 311, 14]
-                            
-                            def calc_dist(p1, p2):
-                                return np.linalg.norm(np.array([p1.x * w, p1.y * h]) - np.array([p2.x * w, p2.y * h]))
-                                
-                            def calc_ratio(pts):
-                                hor = calc_dist(landmarks.landmark[pts[0]], landmarks.landmark[pts[3]])
-                                v1 = calc_dist(landmarks.landmark[pts[1]], landmarks.landmark[pts[5]])
-                                v2 = calc_dist(landmarks.landmark[pts[2]], landmarks.landmark[pts[4]])
-                                return (v1 + v2) / (2.0 * hor) if hor > 0 else 0
-                                
-                            ear = (calc_ratio(left_eye) + calc_ratio(right_eye)) / 2.0
-                            mar = calc_ratio(mouth)
-                            fatigue_metrics.append({"ear": ear, "mar": mar})
-                
                 # Update shared state
                 with self.results_lock:
                     self.latest_results[camera_id] = {
                         "timestamp": time.time(),
-                        "faces": faces,
-                        "fatigue_metrics": fatigue_metrics
+                        "faces": faces
                     }
                     
             except Exception as e:
@@ -142,5 +103,15 @@ class FaceWorker:
             if time.time() - data["timestamp"] > 2.0:
                 return {}
                 
-            # Return both faces and fatigue_metrics
+            # Return faces
             return data
+
+    def on_frame_processed(self, frame_data: FrameData) -> None:
+        if not self.frame_queue.full():
+            try:
+                self.frame_queue.put_nowait({
+                    "camera_id": frame_data.camera_id,
+                    "frame": frame_data.frame
+                })
+            except queue.Full:
+                pass

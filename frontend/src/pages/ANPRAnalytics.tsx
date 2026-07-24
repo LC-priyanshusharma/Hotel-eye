@@ -24,19 +24,50 @@ export default function ANPRAnalytics() {
   const { data: history } = useQuery({
     queryKey: ['anpr-history', searchTerm],
     queryFn: async () => {
-      const res = await axios.get(`http://localhost:8000/api/plugins/anpr/search?limit=20${searchTerm ? `&plate=${searchTerm}` : ''}`);
+      const res = await axios.get(`/api/plugins/anpr/search?limit=20${searchTerm ? `&plate=${searchTerm}` : ''}`);
       return res.data;
     }
   });
 
-  // Dummy websocket connection for live events (in real implementation, connect to actual WS)
+  const { data: stats } = useQuery({
+    queryKey: ['anpr-stats'],
+    queryFn: async () => {
+      const res = await axios.get('/api/plugins/anpr/stats');
+      return res.data;
+    },
+    refetchInterval: 5000
+  });
+
+  // WebSocket connection for live events from the unified stream
   useEffect(() => {
-    const ws = new WebSocket('ws://localhost:8000/ws/events');
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/events`);
     ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.plugin_name === 'ANPRPlugin') {
-        setLiveEvents((prev) => [data.metadata, ...prev].slice(0, 10));
-      }
+      try {
+        const data = JSON.parse(event.data);
+        let newEvents: ANPREvent[] = [];
+        Object.values(data).forEach((camData: any) => {
+          if (camData.events && camData.events['ANPRPlugin']) {
+            camData.events['ANPRPlugin'].forEach((evt: any) => {
+              if (evt.event_type === 'LIVE_TRACKING') {
+                newEvents.push({
+                  ...evt,
+                  plate_number: evt.metadata?.plate_number || 'UNKNOWN',
+                  vehicle_type: evt.metadata?.vehicle_type
+                });
+              }
+            });
+          }
+        });
+        if (newEvents.length > 0) {
+          setLiveEvents(prev => {
+            const combined = [...newEvents, ...prev];
+            // Remove duplicates by plate+timestamp just in case
+            const unique = Array.from(new Map(combined.map(item => [`${item.plate_number}-${item.timestamp}`, item])).values());
+            return unique.slice(0, 10);
+          });
+        }
+      } catch(e) {}
     };
     return () => ws.close();
   }, []);
@@ -60,28 +91,28 @@ export default function ANPRAnalytics() {
         <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl flex items-center justify-between">
           <div>
             <p className="text-zinc-400 text-sm">Total Reads Today</p>
-            <p className="text-2xl font-semibold">1,248</p>
+            <p className="text-2xl font-semibold">{stats?.total_reads_today || 0}</p>
           </div>
           <div className="p-3 bg-blue-500/10 text-blue-400 rounded-lg"><Car /></div>
         </div>
         <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl flex items-center justify-between">
           <div>
             <p className="text-zinc-400 text-sm">Unique Vehicles</p>
-            <p className="text-2xl font-semibold">892</p>
+            <p className="text-2xl font-semibold">{stats?.unique_vehicles || 0}</p>
           </div>
           <div className="p-3 bg-indigo-500/10 text-indigo-400 rounded-lg"><Camera /></div>
         </div>
         <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl flex items-center justify-between">
           <div>
             <p className="text-zinc-400 text-sm">Watchlist Matches</p>
-            <p className="text-2xl font-semibold text-red-400">12</p>
+            <p className="text-2xl font-semibold text-red-400">{stats?.watchlist_matches || 0}</p>
           </div>
           <div className="p-3 bg-red-500/10 text-red-400 rounded-lg"><AlertTriangle /></div>
         </div>
         <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl flex items-center justify-between">
           <div>
             <p className="text-zinc-400 text-sm">Avg Accuracy</p>
-            <p className="text-2xl font-semibold text-green-400">98.4%</p>
+            <p className="text-2xl font-semibold text-green-400">{stats?.average_accuracy || 98.4}%</p>
           </div>
           <div className="p-3 bg-green-500/10 text-green-400 rounded-lg"><ShieldCheck /></div>
         </div>
@@ -101,7 +132,7 @@ export default function ANPRAnalytics() {
               <div key={idx} className="bg-zinc-950 border border-zinc-800 p-3 rounded-lg flex gap-3 animate-in fade-in slide-in-from-right-4">
                 <div className="w-20 h-20 bg-zinc-800 rounded flex-shrink-0 overflow-hidden">
                   {evt.vehicle_snapshot ? (
-                     <img src={`http://localhost:8000/${evt.vehicle_snapshot}`} className="w-full h-full object-cover" alt="Vehicle" />
+                     <img src={`/${evt.vehicle_snapshot}`} className="w-full h-full object-cover" alt="Vehicle" />
                   ) : <Car className="w-full h-full p-4 text-zinc-600" />}
                 </div>
                 <div className="flex-1">

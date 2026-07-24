@@ -20,7 +20,6 @@ class FrameData:
     camera_id: str
     timestamp: float
     faces: List[Any] = field(default_factory=list)
-    fatigue_metrics: List[Dict[str, float]] = field(default_factory=list)
 
 class TrackerContext:
     # A simple context object passed to plugins allowing them to store
@@ -59,3 +58,16 @@ class BaseDetectionPlugin(ABC):
         Process a single frame's detections and return any generated events.
         """
         pass
+
+    def initialize(self) -> None:
+        """
+        Lifecycle hook called once when the plugin is loaded into the engine.
+        Override to load heavy models or establish connections.
+        """
+        pass
+
+    def health(self) -> Dict[str, Any]:
+        """
+        Lifecycle hook to report plugin-specific health metrics.
+        """
+        return {"status": "ok"}

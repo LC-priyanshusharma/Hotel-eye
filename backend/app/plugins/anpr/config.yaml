@@ -1,0 +1,31 @@
+ocr:
+  provider: "awiros"
+  model_path: "awiros/anpr-ocr-indian-v1"
+  use_gpu: false
+  confidence_threshold: 0.7
+
+plate_detector:
+  provider: "indian_yolo"
+  model_path: "indian_plate_yolo.pt"
+  confidence_threshold: 0.65
+
+validation:
+  smart_repair_enabled: true
+  repair_confidence_threshold: 0.85
+  format_strategies:
+    - "private"
+    - "commercial"
+    - "ev"
+    - "diplomatic"
+    - "military"
+    - "bh_series"
+
+fusion:
+  min_observations: 2
+  track_timeout_seconds: 3.0
+  weighted_voting: true
+
+enhancement:
+  clahe_clip_limit: 2.0
+  denoise_h: 30
+  quality_threshold: 0.75

@@ -11,7 +11,10 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.6.1",
     "@tanstack/react-query": "^5.101.2",
+    "@types/three": "^0.185.1",
     "axios": "^1.18.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -30,6 +33,7 @@
     "recharts": "^3.9.2",
     "tailwind-merge": "^3.6.0",
     "tailwindcss-animate": "^1.0.7",
+    "three": "^0.185.1",
     "zod": "^4.4.3",
     "zustand": "^5.0.14"
   },

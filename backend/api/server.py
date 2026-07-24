@@ -3,10 +3,11 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.encoders import jsonable_encoder
 import os
 from sqlalchemy import text
 from database.session import SessionLocal
-from models.models import CameraEvent
+from models.models import CameraEvent, Camera
 from services.event_service import EventService
 import random
 import cv2
@@ -14,29 +15,29 @@ import threading
 import time
 import asyncio
 from fastapi.middleware.cors import CORSMiddleware
-from app.plugins.garbage.schemas import GarbageEventCreate, GarbageSnapshotCreate
-from app.plugins.garbage.repository import create_garbage_event
-from app.plugins.garbage.router import garbage_router
-from app.plugins.queue.router import queue_router
+
 from app.plugins.parking.router import parking_router
 from app.plugins.attendance.router import attendance_router
 from app.plugins.fire.router import fire_router
 from app.plugins.visitor.router import router as visitor_router
+from app.plugins.anpr.router import router as anpr_router
 from app.auth.routes import router as auth_router
 from app.auth.admin_routes import admin_router
 from app.config_routes import config_router
+from voice.api.routes import voice_router
 
 app = FastAPI(title="AI CCTV Analytics API")
 
 app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(config_router)
-app.include_router(garbage_router)
-app.include_router(queue_router)
+
 app.include_router(parking_router)
 app.include_router(attendance_router)
 app.include_router(fire_router)
 app.include_router(visitor_router, prefix="/api/plugins")
+app.include_router(anpr_router, prefix="/api/plugins")
+app.include_router(voice_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -46,27 +47,81 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+def startup_event():
+    import threading
+    from loguru import logger
+    from core.camera_manager import camera_manager
+    from config.config import config
+    from database.persistence import DatabaseWorker
+    from main import event_loop
+    
+    logger.info("Starting up FastAPI application and Camera Manager...")
+    
+    # 1. Start Database Worker
+    app.state.db_worker = DatabaseWorker()
+    app.state.db_worker.start()
+    
+    # 2. Start Global Workers
+    camera_manager.start_global_workers()
+    
+    # 3. Start Camera Pipelines
+    for url in config.camera_list:
+        camera_manager.start_camera_pipeline(url)
+        
+    # 4. Start Event Router (Publishes to Redis)
+    threading.Thread(target=event_loop, args=(camera_manager.result_queue,), daemon=True).start()
+
+@app.on_event("shutdown")
+def shutdown_event():
+    from loguru import logger
+    from core.camera_manager import camera_manager
+    logger.info("Shutting down FastAPI application...")
+    camera_manager.stop_all()
+    if hasattr(app.state, "db_worker"):
+        app.state.db_worker.stop()
+
 os.makedirs("snapshots", exist_ok=True)
 app.mount("/snapshots", StaticFiles(directory="snapshots"), name="snapshots")
 
 LATEST_DATA = {}
+EVENT_TTL_SECONDS = 1.0
 DATA_LOCK = threading.Lock()
 connected_websockets = set()
 
 def update_global_state(packet: dict):
+    import time
+    cam_id = packet["camera_id"]
+    now = time.time()
+    
     with DATA_LOCK:
-        cam_id = packet["camera_id"]
         if packet.get("is_gesture_synthetic", False):
             # Merge gesture events into existing packet to avoid overwriting YOLO events
             if cam_id in LATEST_DATA:
                 LATEST_DATA[cam_id]["events"].update(packet["events"])
-        else:
-            # For YOLO packets, we can replace or keep old gesture events
-            # But YOLO packet is complete, so we replace it
-            old_packet = LATEST_DATA.get(cam_id)
-            LATEST_DATA[cam_id] = packet
-            if old_packet and "GestureDetectionPlugin" in old_packet.get("events", {}):
-                LATEST_DATA[cam_id]["events"]["GestureDetectionPlugin"] = old_packet["events"]["GestureDetectionPlugin"]
+            return
+            
+        old_packet = LATEST_DATA.get(cam_id, {})
+        cached_events = old_packet.get("_cached_events", {}).copy()
+        
+    new_events = packet.get("events", {})
+    for plugin_name, events_list in new_events.items():
+        if events_list:
+            cached_events[plugin_name] = {"data": events_list, "ts": now}
+            
+    pruned_events = {}
+    for plugin_name, cache_obj in list(cached_events.items()):
+        if now - cache_obj["ts"] <= EVENT_TTL_SECONDS:
+            pruned_events[plugin_name] = cache_obj["data"]
+            
+    if old_packet and "GestureDetectionPlugin" in old_packet.get("events", {}):
+        pruned_events["GestureDetectionPlugin"] = old_packet["events"]["GestureDetectionPlugin"]
+
+    packet["events"] = pruned_events
+    packet["_cached_events"] = cached_events
+    
+    with DATA_LOCK:
+        LATEST_DATA[cam_id] = packet
 
 @app.get("/")
 def health_check():
@@ -103,8 +158,10 @@ class ManualEvent(BaseModel):
     
 @app.post("/events/manual")
 def post_manual_event(event: ManualEvent):
+    from repositories.event_repository import EventRepository
     db = SessionLocal()
     try:
+        repo = EventRepository(db)
         new_event = CameraEvent(
             camera_id=event.camera_id,
             events={
@@ -112,8 +169,7 @@ def post_manual_event(event: ManualEvent):
                 "description": event.description
             }
         )
-        db.add(new_event)
-        db.commit()
+        repo.add(new_event)
         return {"status": "success"}
     finally:
         db.close()
@@ -121,9 +177,11 @@ def post_manual_event(event: ManualEvent):
 @app.get("/api/intrusions")
 def get_intrusions():
     """Returns historical intrusion events with snapshots from the DB."""
+    from repositories.event_repository import EventRepository
     db = SessionLocal()
     try:
-        events = db.query(CameraEvent).order_by(CameraEvent.timestamp.desc()).limit(1000).all()
+        repo = EventRepository(db)
+        events = repo.get_recent_events(limit=1000)
         
         intrusions = []
         for e in events:
@@ -150,23 +208,33 @@ async def websocket_events(websocket: WebSocket):
     connected_websockets.add(websocket)
     try:
         while True:
-            # Gather state
+            # Gather state briefly
             with DATA_LOCK:
-                response = {}
-                for cam_id, packet in LATEST_DATA.items():
-                    response[cam_id] = {
-                        "timestamp": packet["timestamp"],
-                        "events": packet["events"],
-                        "fps": packet.get("fps", 0.0)
-                    }
-            # Push payload
-            await websocket.send_json(response)
+                # Create a shallow copy of LATEST_DATA keys/values to avoid RuntimeErrors
+                snapshot = list(LATEST_DATA.items())
+                
+            response = {}
+            for cam_id, packet in snapshot:
+                response[cam_id] = {
+                    "timestamp": packet["timestamp"],
+                    "events": packet["events"],
+                    "fps": packet.get("fps", 0.0)
+                }
+                
+            # Push payload after encoding Pydantic models (outside the lock)
+            encoded_response = jsonable_encoder(response)
+            
+            try:
+                await websocket.send_json(encoded_response)
+            except Exception:
+                # If send_json fails, the client is dead. Break to disconnect.
+                break
             
             # Target 10 FPS updates for the UI
             await asyncio.sleep(0.1) 
     except WebSocketDisconnect:
-        connected_websockets.remove(websocket)
-    except Exception as e:
+        pass
+    finally:
         if websocket in connected_websockets:
             connected_websockets.remove(websocket)
 
@@ -189,10 +257,13 @@ async def generate_mjpeg(camera_id: str):
         import torch
         import cv2
         
-        annotated_frame = result.plot(labels=False, conf=False)
+        if "hlo.mp4" in camera_id:
+            annotated_frame = packet["frame"].copy()
+        else:
+            annotated_frame = result.plot(labels=False, conf=False)
         
         # Override tracker IDs to just show 1, 2, 3... for the people currently in the frame
-        if hasattr(result, 'boxes') and result.boxes is not None and getattr(result.boxes, 'is_track', False):
+        if hasattr(result, 'boxes') and result.boxes is not None and getattr(result.boxes, 'is_track', False) and "hlo.mp4" not in camera_id:
             global CAMERA_ID_MAPS, CAMERA_AVAILABLE_IDS
             if 'CAMERA_ID_MAPS' not in globals():
                 global CAMERA_ID_MAPS, CAMERA_AVAILABLE_IDS
@@ -281,14 +352,15 @@ async def generate_mjpeg(camera_id: str):
                             cv2.polylines(annotated_frame, [pts], isClosed=True, color=color, thickness=thick)
                             
         # Always draw the currently configured Intrusion Zone for this camera
-        from config.config import config
-        zone_coords = config.get_zone_for_camera(camera_id)
-        if zone_coords:
-            import numpy as np
-            pts = np.array(zone_coords, np.int32).reshape((-1, 1, 2))
-            # Draw semi-transparent overlay or just solid lines. We will draw red lines.
-            cv2.polylines(annotated_frame, [pts], isClosed=True, color=(0, 0, 255), thickness=2)
-            cv2.putText(annotated_frame, "Restricted Zone", (zone_coords[0][0], zone_coords[0][1] - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+        if "hlo.mp4" not in camera_id:
+            from config.config import config
+            zone_coords = config.get_zone_for_camera(camera_id)
+            if zone_coords:
+                import numpy as np
+                pts = np.array(zone_coords, np.int32).reshape((-1, 1, 2))
+                # Draw semi-transparent overlay or just solid lines. We will draw red lines.
+                cv2.polylines(annotated_frame, [pts], isClosed=True, color=(0, 0, 255), thickness=2)
+                cv2.putText(annotated_frame, "Restricted Zone", (zone_coords[0][0], zone_coords[0][1] - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
                             
         # Reduce JPEG quality to 70 for 60% bandwidth savings (ECC Fast-Drop principle)
         ret, buffer = cv2.imencode('.jpg', annotated_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
@@ -320,9 +392,88 @@ class CameraInfo(BaseModel):
     name: str
     rtsp_url: str
     
-@app.post("/cameras")
+@app.post("/api/cameras")
 def post_camera(camera: CameraInfo):
+    from core.camera_manager import camera_manager
+    from config.config import config
+    import uuid
+    
+    # 1. Persist to Database
+    from repositories.camera_repository import CameraRepository
+    db = SessionLocal()
+    try:
+        repo = CameraRepository(db)
+        # Generate a unique ID if needed or use URL hash
+        cam_id = str(uuid.uuid4())
+        
+        # Check if already exists
+        existing = repo.get_by_url(camera.rtsp_url)
+        if not existing:
+            new_cam = Camera(
+                id=cam_id,
+                name=camera.name,
+                rtsp_url=camera.rtsp_url,
+                active=True
+            )
+            repo.add(new_cam)
+    except Exception as e:
+        db.rollback()
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+    finally:
+        db.close()
+    
+    # 2. Update the running pipeline
+    camera_manager.start_camera_pipeline(camera.rtsp_url)
+    
+    # 3. Update the config in memory so it's included in next /api/config save
+    if not isinstance(config.CAMERA_URLS, str):
+        config.CAMERA_URLS = camera.rtsp_url
+    else:
+        current_urls = [u.strip() for u in config.CAMERA_URLS.split(",") if u.strip()]
+        if camera.rtsp_url not in current_urls:
+            current_urls.append(camera.rtsp_url)
+            config.CAMERA_URLS = ",".join(current_urls)
+            
+    # Also update the parsed list
+    if camera.rtsp_url not in config.camera_list:
+        config.camera_list.append(camera.rtsp_url)
+        
     return {"status": "success", "camera": camera.model_dump()}
+
+@app.get("/api/cameras")
+def get_cameras():
+    from repositories.camera_repository import CameraRepository
+    db = SessionLocal()
+    try:
+        repo = CameraRepository(db)
+        cameras = repo.get_active_cameras()
+        return {
+            "status": "success", 
+            "cameras": [
+                {"id": c.id, "name": c.name, "rtsp_url": c.rtsp_url} for c in cameras
+            ]
+        }
+    finally:
+        db.close()
+
+@app.get("/cameras/status")
+def get_cameras_status():
+    from core.camera_manager import camera_manager
+    return camera_manager.get_status()
+
+@app.get("/api/system/ip")
+def get_system_ip():
+    import socket
+    try:
+        # Create a dummy socket to determine the local IP used for outbound connections
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # We don't actually connect to 8.8.8.8, it just helps the OS determine the route
+        s.connect(('8.8.8.8', 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        return {"ip": local_ip}
+    except Exception as e:
+        return {"ip": "127.0.0.1"}
 
 # AI Agent Chat Endpoint
 class ChatRequest(BaseModel):

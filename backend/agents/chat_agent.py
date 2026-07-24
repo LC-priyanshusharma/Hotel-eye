@@ -11,6 +11,7 @@ import json
 import datetime
 import traceback
 from sqlalchemy.exc import SQLAlchemyError
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from database.session import SessionLocal
 from config.config import AppConfig
@@ -151,7 +152,7 @@ class LogicEyeAgent:
         if len(messages) > 0 and not isinstance(messages[0], SystemMessage):
             system_prompt = f"""
             You are LogicEye AI, an intelligent assistant for a CCTV surveillance system.
-            You can query the PostgreSQL (TimescaleDB) database for historical camera events, intrusions, fires, weapons, and attendance.
+            You can query the PostgreSQL (TimescaleDB) database for historical camera events, intrusions, fires, and attendance.
             Current time is {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}.
             Always be concise and helpful. When querying JSONB columns, use standard PostgreSQL JSONB extraction (e.g. jsonb_array_length(events->'IntrusionDetectionPlugin') instead of json_array_length).
             If asked about the current or live status (like how many people are present right now), ALWAYS use the check_live_camera_status tool.
@@ -179,6 +180,16 @@ class LogicEyeAgent:
                 
         return {"messages": tool_responses}
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        reraise=True
+    )
+    def _execute_graph_with_retry(self, inputs):
+        for output in self.graph.stream(inputs):
+            pass
+        return output
+
     def chat(self, user_input: str, camera_id: str = "") -> str:
         """Entry point for the FastAPI endpoint"""
         if not self.llm:
@@ -190,9 +201,7 @@ class LogicEyeAgent:
         }
         
         try:
-            # Run the graph
-            for output in self.graph.stream(inputs):
-                pass # We just want the final output
+            output = self._execute_graph_with_retry(inputs)
                 
             # The final state is stored in the last node's output
             final_messages = output.get("agent", {}).get("messages", [])
@@ -205,12 +214,16 @@ class LogicEyeAgent:
             tb = traceback.format_exc()
             logger.error(f"Agent error traceback:\n{tb}")
             
-            # Graceful recovery for specific LLM API errors
-            error_msg = str(e)
-            if "413" in error_msg or "rate_limit_exceeded" in error_msg:
-                return "I encountered a token limit error from the AI provider. The database returned too much information for my current model tier. Please try a more specific query (e.g. 'Show the last 2 intrusions')."
+            # Phase 5: Structured mapping, NEVER leak provider errors
+            error_msg = str(e).lower()
+            if "413" in error_msg or "rate limit" in error_msg or "429" in error_msg:
+                return "I'm receiving too much data or am temporarily rate-limited. Please try again in a moment."
+            elif "401" in error_msg or "authentication" in error_msg:
+                return "There is an issue with the AI authentication key. Please check the system configuration."
+            elif "timeout" in error_msg or "deadline" in error_msg:
+                return "The AI service timed out while processing your request. Please try again."
                 
-            return f"I encountered an error while analyzing the data. Details: {error_msg}"
+            return "The AI service is temporarily unavailable. Please try again later."
 
 # Singleton instance
 agent = LogicEyeAgent()

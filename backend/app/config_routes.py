@@ -34,7 +34,13 @@ async def update_config(
     try:
         for key, value in update_data.updates.items():
             if hasattr(config, key):
-                setattr(config, key, value)
+                current_val = getattr(config, key)
+                if isinstance(current_val, dict) and isinstance(value, dict):
+                    # Safely merge dictionary updates (like CAMERA_PLUGINS)
+                    current_val.update(value)
+                    setattr(config, key, current_val)
+                else:
+                    setattr(config, key, value)
         return {"status": "success", "message": "Configuration updated in memory"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

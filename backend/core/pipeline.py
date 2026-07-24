@@ -1,29 +1,34 @@
 import threading
 import queue
 import time
-from typing import Optional, Any
+from typing import Optional, Any, List
 from loguru import logger
 
 from config.config import config
-from detection.detector import YoloOpenVINODetector
+from detection.factory import InferenceFactory
+from detection.tracker_factory import TrackerFactory
+from detection.interfaces.inference import IInferenceEngine
+from detection.interfaces.tracker import ITracker
 from app.engine.engine import DetectionEngine
 from app.engine.base import FrameData
+from core.observer import IFrameObserver
 
 class InferenceWorker:
     """
     Background worker thread dedicated to AI inference, tracking, and analytics.
     """
-    def __init__(self, camera_id: str, input_queue: queue.Queue, output_queue: queue.Queue, gesture_queue: Optional[queue.Queue] = None, face_worker: Optional[Any] = None):
+    def __init__(self, camera_id: str, input_queue: queue.Queue, output_queue: queue.Queue, observers: Optional[List[IFrameObserver]] = None, face_data_provider: Optional[Any] = None):
         self.camera_id = camera_id
         self.input_queue = input_queue
         self.output_queue = output_queue
-        self.gesture_queue = gesture_queue
-        self.face_worker = face_worker
+        self.observers = observers or []
+        self.face_data_provider = face_data_provider
         self.is_running = False
         self._thread: Optional[threading.Thread] = None
         
         # Initialized inside the thread
-        self.detector: Optional[YoloOpenVINODetector] = None
+        self.detector: Optional[IInferenceEngine] = None
+        self.tracker: Optional[ITracker] = None
         self.detection_engine: Optional[DetectionEngine] = None
         
         self.frame_count = 0
@@ -46,13 +51,17 @@ class InferenceWorker:
         logger.info(f"Inference thread {self.camera_id} starting up...")
         try:
             conf = config.get_confidence_for_camera(self.camera_id)
-            self.detector = YoloOpenVINODetector(conf=conf)
+            self.detector = InferenceFactory.create(
+                backend_name=config.INFERENCE_BACKEND,
+                model_path=config.MODEL_PATH,
+                conf=conf,
+                classes=[0, 2, 3, 5, 7, 34, 43]
+            )
+            self.tracker = TrackerFactory.create(config.TRACKER_BACKEND)
             self.detection_engine = DetectionEngine()
             
-            # Combine classes from legacy detector config and new detection engine
-            req_classes = set(self.detector.classes)
-            req_classes.update(self.detection_engine.get_all_required_classes())
-            self.detector.classes = list(req_classes)
+            # Use strictly the classes requested by active plugins
+            self.detector.classes = self.detection_engine.get_all_required_classes()
         except Exception as e:
             logger.error(f"Failed to load AI components: {e}")
             return
@@ -72,23 +81,24 @@ class InferenceWorker:
                 fps = round(1.0 / max((current_time - last_time), 0.001), 1)
                 last_time = current_time
                 
-                # Run Detection (bypass tracker if configured)
+                # Base inference
                 if config.should_bypass_tracker(self.camera_id):
+                    # No tracking, just pure detection (e.g. for fast alerts)
                     result = self.detector.detect(frame)
                 else:
-                    result = self.detector.detect_and_track(frame)
+                    # Detect then track
+                    detections = self.detector.detect(frame)
+                    result = self.tracker.update(detections, frame)
                 
-                # Fetch latest async results from FaceWorker
+                # Fetch latest async results from FaceDataProvider
                 faces = []
-                fatigue_metrics = []
-                if self.face_worker:
-                    face_data = self.face_worker.get_latest_results(self.camera_id)
+                if self.face_data_provider:
+                    face_data = self.face_data_provider.get_latest_results(self.camera_id)
                     if isinstance(face_data, dict):
                         faces = face_data.get("faces", [])
-                        fatigue_metrics = face_data.get("fatigue_metrics", [])
                     
                 # Run New Detection Framework Plugins
-                frame_data = FrameData(frame=frame, detections=result, camera_id=self.camera_id, timestamp=time.time(), faces=faces, fatigue_metrics=fatigue_metrics)
+                frame_data = FrameData(frame=frame, detections=result, camera_id=self.camera_id, timestamp=time.time(), faces=faces)
                 events = self.detection_engine.run_plugins(frame_data)
                 
                 data_packet = {
@@ -100,26 +110,9 @@ class InferenceWorker:
                     "timestamp": time.time()
                 }
                 
-                # Forward to gesture worker if enabled
-                if self.gesture_queue is not None and not self.gesture_queue.full():
-                    try:
-                        self.gesture_queue.put_nowait({
-                            "frame": frame,
-                            "detections": result,
-                            "timestamp": data_packet["timestamp"]
-                        })
-                    except queue.Full:
-                        pass
-                        
-                # Forward to face worker if enabled
-                if self.face_worker is not None and not self.face_worker.frame_queue.full():
-                    try:
-                        self.face_worker.frame_queue.put_nowait({
-                            "camera_id": self.camera_id,
-                            "frame": frame
-                        })
-                    except queue.Full:
-                        pass
+                # Notify all generic observers (Decoupled Phase C)
+                for observer in self.observers:
+                    observer.on_frame_processed(frame_data)
                 
                 if self.output_queue.full():
                     try:

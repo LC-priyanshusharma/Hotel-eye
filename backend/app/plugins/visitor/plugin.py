@@ -100,9 +100,17 @@ class VisitorPlugin(BaseDetectionPlugin):
                 info = self.known_visitors_cache[tid]
                 px1, py1, px2, py2 = p["bbox"]
                 
-                is_unknown = info['name'] == 'Unknown'
-                color = [50, 50, 255] if is_unknown else [50, 255, 50]
-                text_prefix = "UNKNOWN" if is_unknown else "VISITOR"
+                role = info.get('role', 'VISITOR')
+                is_unknown = (role == 'UNKNOWN')
+                
+                if role == 'EMPLOYEE':
+                    color = [255, 200, 50] # Cyan/Blueish for employees
+                elif role == 'VISITOR':
+                    color = [50, 255, 50] # Green for visitors
+                else:
+                    color = [50, 50, 255] # Red for unknown
+                    
+                text_prefix = role
                 
                 # Emit a drawing event for the UI!
                 events.append(DetectionEvent(
@@ -144,7 +152,7 @@ class VisitorPlugin(BaseDetectionPlugin):
                         
                 # If they are registered, it's a recognition. If unknown, it's just tracking an unknown person.
                 if match.status == 'REGISTERED':
-                    event_type = VisitorEventType.VISITOR_RECOGNIZED
+                    event_type = VisitorEventType.EMPLOYEE_RECOGNIZED if match.role == 'EMPLOYEE' else VisitorEventType.VISITOR_RECOGNIZED
                 else:
                     event_type = VisitorEventType.UNKNOWN_PERSON
                     
@@ -167,7 +175,7 @@ class VisitorPlugin(BaseDetectionPlugin):
                 )
                 
                 with self.events_lock:
-                    self.known_visitors_cache[track_id] = {"visitor_id": visitor_id, "name": match.name}
+                    self.known_visitors_cache[track_id] = {"visitor_id": visitor_id, "name": match.name, "role": match.role}
                     # Keep cache small to avoid memory leak
                     if len(self.known_visitors_cache) > 1000:
                         self.known_visitors_cache.clear()
@@ -200,7 +208,7 @@ class VisitorPlugin(BaseDetectionPlugin):
                 )
                 
                 with self.events_lock:
-                    self.known_visitors_cache[track_id] = {"visitor_id": unknown_visitor.visitor_id, "name": "Unknown"}
+                    self.known_visitors_cache[track_id] = {"visitor_id": unknown_visitor.visitor_id, "name": "Unknown", "role": "UNKNOWN"}
                     if len(self.known_visitors_cache) > 1000:
                         self.known_visitors_cache.clear()
                         

@@ -19,7 +19,9 @@ class TemporalFusion:
         self.observations.append(OcrObservation(text, confidence, timestamp))
 
     def get_best_plate(self) -> Tuple[Optional[str], float]:
-        if not self.observations:
+        from app.plugins.anpr.config_parser import anpr_app_config
+        
+        if len(self.observations) < anpr_app_config.fusion.min_observations:
             return None, 0.0
 
         # Weighted majority voting

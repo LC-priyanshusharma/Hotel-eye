@@ -7,8 +7,10 @@ from loguru import logger
 from config.config import config
 from .detector import GestureDetector
 from .association import GesturePersonAssociator
+from core.observer import IFrameObserver
+from app.engine.base import FrameData
 
-class GestureWorker:
+class GestureWorker(IFrameObserver):
     def __init__(self, camera_id: str, input_queue: queue.Queue, result_queue: queue.Queue):
         self.camera_id = camera_id
         self.input_queue = input_queue
@@ -130,3 +132,14 @@ class GestureWorker:
                 pass
             except Exception as e:
                 logger.error(f"Error in Gesture Worker loop: {e}")
+
+    def on_frame_processed(self, frame_data: FrameData) -> None:
+        if not self.input_queue.full():
+            try:
+                self.input_queue.put_nowait({
+                    "frame": frame_data.frame,
+                    "detections": frame_data.detections,
+                    "timestamp": frame_data.timestamp
+                })
+            except queue.Full:
+                pass

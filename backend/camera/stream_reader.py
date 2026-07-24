@@ -68,11 +68,16 @@ class StreamReader:
             if not self._cap.isOpened():
                 raise Exception("VideoCapture not opened")
                 
+            self.fps = self._cap.get(cv2.CAP_PROP_FPS)
+            if self.fps <= 0:
+                self.fps = 30.0
+            self.frame_delay = 1.0 / self.fps
+                
             # Optional optimizations for RTSP
             if str(self.source).startswith("rtsp://") or str(self.source).startswith("http"):
                 self._cap.set(cv2.CAP_PROP_BUFFERSIZE, 2)
             
-            logger.info(f"Successfully connected to OpenCV source: {self.source}")
+            logger.info(f"Successfully connected to OpenCV source: {self.source} @ {self.fps} FPS")
             return True
         except Exception as e:
             logger.error(f"Failed to open source {self.source}: {e}")
@@ -81,6 +86,7 @@ class StreamReader:
 
     def _update(self) -> None:
         backoff_time = config.CAMERA_RECONNECT_DELAY_SECONDS
+        is_file = str(self.source).endswith('.mp4') or str(self.source).endswith('.avi')
 
         while self.is_running:
             if self._cap is None or not self._cap.isOpened():
@@ -92,8 +98,13 @@ class StreamReader:
                 backoff_time = config.CAMERA_RECONNECT_DELAY_SECONDS
 
             try:
+                start_time = time.perf_counter()
                 ret, frame = self._cap.read()
                 if not ret or frame is None:
+                    if is_file:
+                        self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                        continue
+                        
                     logger.warning(f"Failed to grab frame from {self.source}. Reconnecting...")
                     self._release_capture()
                     time.sleep(1.0)
@@ -110,6 +121,12 @@ class StreamReader:
                 except queue.Full:
                     pass
                     
+                if is_file:
+                    elapsed = time.perf_counter() - start_time
+                    sleep_time = self.frame_delay - elapsed
+                    if sleep_time > 0:
+                        time.sleep(sleep_time)
+                        
             except Exception as e:
                 logger.error(f"Unexpected error in capture thread: {e}")
                 self._release_capture()

@@ -6,29 +6,31 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tool
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
+import { staggerContainer, fadeInUp } from '@/utils/animations'
+
 function KPICard({ title, value, subValue, icon: Icon, trend, colorClass }: any) {
   return (
     <motion.div 
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="glass p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden group border border-white/5"
+      variants={fadeInUp}
+      whileHover={{ y: -5, scale: 1.02 }}
+      className="glass-pro p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden group border border-white/5 cursor-pointer transition-all duration-300"
     >
-      <div className={cn("absolute top-0 right-0 w-24 h-24 bg-gradient-to-br opacity-10 rounded-full blur-2xl -mr-8 -mt-8", colorClass.replace('text-', 'from-'))} />
+      <div className={cn("absolute top-0 right-0 w-24 h-24 bg-gradient-to-br opacity-20 group-hover:opacity-40 transition-opacity rounded-full blur-[40px] -mr-4 -mt-4", colorClass.replace('text-', 'from-'))} />
       <div className="flex justify-between items-start mb-4 relative z-10">
-        <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
-        <div className={cn("p-2 rounded-lg bg-black/40", colorClass)}>
-          <Icon className="w-4 h-4" />
+        <h3 className="text-xs font-bold tracking-widest uppercase text-muted-foreground drop-shadow-md">{title}</h3>
+        <div className={cn("p-2 rounded-xl bg-white/5 border border-white/10 group-hover:scale-110 transition-transform", colorClass)}>
+          <Icon className="w-4 h-4 drop-shadow-md" />
         </div>
       </div>
       <div className="relative z-10">
-        <div className="text-3xl font-bold tracking-tight text-white mb-1">{value}</div>
+        <div className="text-3xl font-black tracking-tight text-white mb-2 drop-shadow-lg">{value}</div>
         <div className="flex items-center gap-2">
           {trend && (
-            <span className={cn("text-xs font-semibold px-1.5 py-0.5 rounded", trend > 0 ? "bg-success/20 text-success" : "bg-danger/20 text-danger")}>
+            <span className={cn("text-[10px] font-black tracking-wider uppercase px-2 py-0.5 rounded shadow-sm", trend > 0 ? "bg-success/20 text-success border border-success/30" : "bg-danger/20 text-danger border border-danger/30")}>
               {trend > 0 ? '+' : ''}{trend}%
             </span>
           )}
-          <span className="text-xs text-muted-foreground">{subValue}</span>
+          <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">{subValue}</span>
         </div>
       </div>
     </motion.div>
@@ -42,7 +44,7 @@ export function Analytics() {
   useEffect(() => {
     const fetchKPIs = async () => {
       try {
-        const res = await fetch('http://localhost:8000/analytics/dashboard')
+        const res = await fetch('/analytics/dashboard')
         if (res.ok) setData(await res.json())
       } catch (err) {}
     }
@@ -62,7 +64,7 @@ export function Analytics() {
       doc.setFontSize(11)
       doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 30)
       
-      const res = await fetch('http://localhost:8000/events')
+      const res = await fetch('/events')
       if (res.ok) {
         const events = await res.json()
         const tableData = events.slice(0, 100).map((ev: any) => [
@@ -105,14 +107,19 @@ export function Analytics() {
         </div>
       </div>
 
-      <div className="mb-8">
-        <h2 className="text-lg font-semibold mb-4 text-white/90">Operational Overview</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <KPICard title="Total Cameras" value={data.total_cameras} subValue="Active streams" icon={Camera} colorClass="text-blue-400" />
-          <KPICard title="AI Enabled" value={data.ai_enabled} subValue="YOLOv8 active" icon={Zap} trend={12} colorClass="text-amber-400" />
+      <div className="mb-10 relative z-10">
+        <h2 className="text-sm font-bold tracking-widest uppercase mb-4 text-foreground drop-shadow-md">Operational Overview</h2>
+        <motion.div 
+          variants={staggerContainer}
+          initial="hidden"
+          animate="visible"
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
+        >
+          <KPICard title="Total Cameras" value={data.total_cameras} subValue="Active streams" icon={Camera} colorClass="text-primary" />
+          <KPICard title="AI Enabled" value={data.ai_enabled} subValue="YOLOv8 active" icon={Zap} trend={12} colorClass="text-accent" />
           <KPICard title="Critical Alerts" value={data.critical_alerts} subValue="Unresolved" icon={ShieldAlert} trend={-5} colorClass="text-danger" />
           <KPICard title="System Uptime" value={data.uptime} subValue="99.99% SLA" icon={Activity} colorClass="text-success" />
-        </div>
+        </motion.div>
       </div>
 
       <div className="mb-8">
@@ -126,9 +133,9 @@ export function Analytics() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <div className="glass rounded-2xl p-6 h-[300px] flex flex-col border border-white/5">
-          <h3 className="text-sm font-semibold mb-4 text-white/90">AI Detection Timeline</h3>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10 relative z-10">
+        <motion.div variants={fadeInUp} initial="hidden" animate="visible" className="glass-panel rounded-3xl p-6 h-[350px] flex flex-col border border-white/5 relative">
+          <h3 className="text-xs font-bold tracking-widest uppercase mb-6 text-foreground drop-shadow-md">AI Detection Timeline</h3>
           <div className="flex-1 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={[
@@ -136,31 +143,37 @@ export function Analytics() {
                 { time: '10:30', detections: 45 }, { time: '10:45', detections: 22 },
                 { time: '11:00', detections: 8 }, { time: '11:15', detections: 34 }
               ]}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
-                <XAxis dataKey="time" stroke="#888" fontSize={12} />
-                <YAxis stroke="#888" fontSize={12} />
-                <Tooltip contentStyle={{ backgroundColor: '#111', borderColor: '#333', fontSize: 12 }} />
-                <Area type="monotone" dataKey="detections" stroke="var(--color-primary)" fill="var(--color-primary)" fillOpacity={0.2} name="Events" />
+                <defs>
+                  <linearGradient id="colorDetections" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="var(--color-primary)" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                <XAxis dataKey="time" stroke="#666" tick={{fill: '#666', fontSize: 12}} tickLine={false} axisLine={false} />
+                <YAxis stroke="#666" tick={{fill: '#666', fontSize: 12}} tickLine={false} axisLine={false} />
+                <Tooltip contentStyle={{ backgroundColor: 'rgba(10,10,10,0.8)', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '12px', backdropFilter: 'blur(10px)', color: '#fff' }} />
+                <Area type="monotone" dataKey="detections" stroke="var(--color-primary)" strokeWidth={3} fillOpacity={1} fill="url(#colorDetections)" name="Events" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
-        </div>
-        <div className="glass rounded-2xl p-6 h-[300px] flex flex-col border border-white/5">
-          <h3 className="text-sm font-semibold mb-4 text-white/90">Camera Latency Heatmap</h3>
+        </motion.div>
+        <motion.div variants={fadeInUp} initial="hidden" animate="visible" className="glass-panel rounded-3xl p-6 h-[350px] flex flex-col border border-white/5 relative">
+          <h3 className="text-xs font-bold tracking-widest uppercase mb-6 text-foreground drop-shadow-md">Camera Latency Heatmap</h3>
           <div className="flex-1 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <ScatterChart>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
-                <XAxis dataKey="time" type="category" allowDuplicatedCategory={false} stroke="#888" fontSize={12} />
-                <YAxis dataKey="latency" type="number" stroke="#888" fontSize={12} name="Latency (ms)" />
-                <ZAxis dataKey="z" type="number" range={[20, 100]} />
-                <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ backgroundColor: '#111', borderColor: '#333', fontSize: 12 }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                <XAxis dataKey="time" type="category" allowDuplicatedCategory={false} stroke="#666" tick={{fill: '#666', fontSize: 12}} tickLine={false} axisLine={false} />
+                <YAxis dataKey="latency" type="number" stroke="#666" tick={{fill: '#666', fontSize: 12}} tickLine={false} axisLine={false} name="Latency (ms)" />
+                <ZAxis dataKey="z" type="number" range={[50, 200]} />
+                <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ backgroundColor: 'rgba(10,10,10,0.8)', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '12px', backdropFilter: 'blur(10px)', color: '#fff' }} />
                 <Scatter name="Camera 1" data={[{time: '10:00', latency: 45, z: 2}, {time: '10:30', latency: 42, z: 2}, {time: '11:00', latency: 50, z: 2}]} fill="var(--color-success)" />
                 <Scatter name="Camera 2" data={[{time: '10:00', latency: 85, z: 2}, {time: '10:30', latency: 90, z: 2}, {time: '11:00', latency: 88, z: 2}]} fill="var(--color-warning)" />
               </ScatterChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </motion.div>
       </div>
 
       {/* Analytics Submenu */}
@@ -198,7 +211,7 @@ export function Events({ filter = 'All Events' }: { filter?: string }) {
   useEffect(() => {
     const fetchEvents = async () => {
       try {
-        const res = await fetch('http://localhost:8000/events')
+        const res = await fetch('/events')
         if (res.ok) {
           const allEvents = await res.json()
           
@@ -209,7 +222,7 @@ export function Events({ filter = 'All Events' }: { filter?: string }) {
             if (filter === 'Attendance') return desc.includes('CHECK IN') || desc.includes('CHECK OUT')
             if (filter === 'Person Count') return desc.includes('PERSON COUNT')
             if (filter === 'Intrusions') return desc.includes('INTRUSION')
-            if (filter === 'Safety Alerts') return desc.includes('FIRE') || desc.includes('SMOKE') || desc.includes('WEAPON')
+            if (filter === 'Safety Alerts') return desc.includes('FIRE')
             return true
           })
           
@@ -283,7 +296,7 @@ export function Events({ filter = 'All Events' }: { filter?: string }) {
                 <td className="px-6 py-4">
                   {ev.snapshot_file ? (
                     <img 
-                      src={`http://localhost:8000/snapshots/${ev.snapshot_file}`} 
+                      src={`/snapshots/${ev.snapshot_file}`} 
                       alt="Snapshot" 
                       className="w-24 h-16 object-cover rounded shadow border border-white/10"
                     />

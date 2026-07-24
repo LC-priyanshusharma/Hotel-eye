@@ -33,7 +33,8 @@ class ANPRService:
         while True:
             try:
                 track_data = await self.queue.get()
-                self._handle_track(track_data)
+                # Run the blocking DB and I/O operations in a thread pool
+                await asyncio.to_thread(self._handle_track, track_data)
                 self.queue.task_done()
             except asyncio.CancelledError:
                 break
@@ -41,24 +42,38 @@ class ANPRService:
                 logger.error(f"Error processing ANPR track data: {e}")
 
     def _handle_track(self, track_data: Dict[str, Any]):
+        from app.plugins.anpr.utils import save_snapshot
+        import numpy as np
+        
+        track_info = track_data["track_info"]
+        
+        # Save images sequentially in this background thread
+        veh_crop = track_info.get("vehicle_snapshot")
+        if isinstance(veh_crop, np.ndarray):
+            track_info["vehicle_snapshot"] = save_snapshot(veh_crop, prefix="veh")
+            
+        plate_crop = track_info.get("plate_snapshot")
+        if isinstance(plate_crop, np.ndarray):
+            track_info["plate_snapshot"] = save_snapshot(plate_crop, prefix="plate")
+
         db = SessionLocal()
         try:
             repo = ANPRRepository(db)
             
             # Log the track
-            repo.create_vehicle_track(track_data["track_info"])
+            repo.create_vehicle_track(track_info)
             
-            best_plate = track_data["track_info"].get("best_plate")
+            best_plate = track_info.get("best_plate")
             if best_plate:
                 # Log to plate history
                 history_data = {
                     "plate_number": best_plate,
-                    "confidence": track_data["track_info"].get("plate_confidence", 0.0),
-                    "timestamp": track_data["track_info"]["start_time"],
-                    "camera_id": track_data["track_info"]["camera_id"],
-                    "track_id": track_data["track_info"]["track_id"],
-                    "vehicle_snapshot": track_data["track_info"].get("vehicle_snapshot"),
-                    "plate_snapshot": track_data["track_info"].get("plate_snapshot"),
+                    "confidence": track_info.get("plate_confidence", 0.0),
+                    "timestamp": track_info["start_time"],
+                    "camera_id": track_info["camera_id"],
+                    "track_id": track_info["track_id"],
+                    "vehicle_snapshot": track_info.get("vehicle_snapshot"),
+                    "plate_snapshot": track_info.get("plate_snapshot"),
                 }
                 repo.log_plate_history(history_data)
                 
@@ -70,10 +85,10 @@ class ANPRService:
                     repo.create_event({
                         "event_type": f"{match.list_type.upper()}_MATCH",
                         "plate_number": best_plate,
-                        "confidence": track_data["track_info"].get("plate_confidence", 0.0),
-                        "timestamp": track_data["track_info"]["start_time"],
-                        "camera_id": track_data["track_info"]["camera_id"],
-                        "track_id": track_data["track_info"]["track_id"]
+                        "confidence": track_info.get("plate_confidence", 0.0),
+                        "timestamp": track_info["start_time"],
+                        "camera_id": track_info["camera_id"],
+                        "track_id": track_info["track_id"]
                     })
         except Exception as e:
             logger.error(f"DB Error handling ANPR track: {e}")

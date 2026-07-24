@@ -13,39 +13,7 @@ from api.server import app, update_global_state
 from tracking.gesture import GestureWorker
 from face.worker import FaceWorker
 
-# Global FaceWorker instance (can process multiple cameras)
-face_worker = FaceWorker()
-
-def start_camera_pipeline(camera_url: str, result_queue: queue.Queue):
-    """Initializes and starts the pipeline for a single camera."""
-    logger.info(f"Setting up pipeline for {camera_url}")
-    
-    stream_reader = StreamReader(source=camera_url, buffer_size=config.FRAME_BUFFER_SIZE)
-    
-    gesture_worker = None
-    gesture_queue = None
-    if config.GESTURE_ENABLED:
-        gesture_queue = queue.Queue(maxsize=10)
-        gesture_worker = GestureWorker(
-            camera_id=camera_url,
-            input_queue=gesture_queue,
-            result_queue=result_queue
-        )
-    
-    inference_worker = InferenceWorker(
-        camera_id=camera_url,
-        input_queue=stream_reader.frame_buffer, 
-        output_queue=result_queue,
-        gesture_queue=gesture_queue,
-        face_worker=face_worker
-    )
-    
-    stream_reader.start()
-    if gesture_worker:
-        gesture_worker.start()
-    inference_worker.start()
-    
-    return stream_reader, inference_worker, gesture_worker
+from core.camera_manager import camera_manager
 
 def event_loop(result_queue: queue.Queue):
     """Pulls results from all cameras, updates API state, and forwards actionable events to Redis."""
@@ -62,7 +30,7 @@ def event_loop(result_queue: queue.Queue):
             # 2. Forward to Database worker via Redis
             # We only send metadata (events) over Redis to avoid massive memory/network bloat
             if packet.get("events"):
-                ignored_redis_events = {None, "info", "PERSON_COUNT", "PARKING_STATS", "QUEUE_STATS", "ATTENDANCE_STATE", "TAMPER_OK", "VISITOR_TRACK"}
+                ignored_redis_events = {None, "info", "PERSON_COUNT", "PARKING_STATS", "ATTENDANCE_STATE", "VISITOR_TRACK"}
                 
                 filtered_events = []
                 for e in packet["events"]:
@@ -82,7 +50,9 @@ def event_loop(result_queue: queue.Queue):
                         "events": filtered_events
                     }
                     
-                    redis_client.xadd("logiceye:events", {"data": json.dumps(db_packet)})
+                    from core.events.bus import RedisEventBus
+                    event_bus = RedisEventBus(config.REDIS_URL)
+                    event_bus.publish("logiceye:events", db_packet)
                 
         except queue.Empty:
             continue
@@ -92,29 +62,38 @@ def event_loop(result_queue: queue.Queue):
 def main():
     logger.info("Starting Distributed AI Surveillance Platform Phase 4 (Persistence)...")
     
-    result_queue = queue.Queue(maxsize=100)
-    
     # 1. Start Database Worker (Now decoupled via Redis)
     db_worker = DatabaseWorker()
     db_worker.start()
     
-    # 2. Start Face Worker
-    face_worker.start()
+    # 2. Start Global Workers
+    camera_manager.start_global_workers()
     
     # 3. Start Camera Pipelines
-    readers = []
-    workers = []
-    gesture_workers = []
-    
-    for url in config.camera_list:
-        reader, worker, g_worker = start_camera_pipeline(url, result_queue)
-        readers.append(reader)
-        workers.append(worker)
-        if g_worker:
-            gesture_workers.append(g_worker)
+    from database.session import SessionLocal
+    from models.models import Camera
+    db = SessionLocal()
+    try:
+        saved_cameras = db.query(Camera).filter(Camera.active == True).all()
+        logger.info(f"Loaded {len(saved_cameras)} active cameras from database.")
+        for cam in saved_cameras:
+            if cam.rtsp_url not in config.camera_list:
+                config.camera_list.append(cam.rtsp_url)
+            camera_manager.start_camera_pipeline(cam.rtsp_url)
+            
+        # Fallback to env vars if DB is completely empty (first boot)
+        if not saved_cameras:
+            for url in config.camera_list:
+                camera_manager.start_camera_pipeline(url)
+    except Exception as e:
+        logger.error(f"Failed to load cameras from DB: {e}")
+        for url in config.camera_list:
+            camera_manager.start_camera_pipeline(url)
+    finally:
+        db.close()
         
-    # 3. Start Event Router (Publishes to Redis)
-    threading.Thread(target=event_loop, args=(result_queue,), daemon=True).start()
+    # 4. Start Event Router (Publishes to Redis)
+    threading.Thread(target=event_loop, args=(camera_manager.result_queue,), daemon=True).start()
     
     logger.info("Starting FastAPI web server on port 8000...")
     try:
@@ -123,14 +102,8 @@ def main():
     except KeyboardInterrupt:
         logger.info("Shutting down...")
     finally:
-        for w in workers:
-            w.stop()
-        for gw in gesture_workers:
-            gw.stop()
-        for r in readers:
-            r.stop()
+        camera_manager.stop_all()
         db_worker.stop()
-        face_worker.stop()
 
 if __name__ == "__main__":
     main()

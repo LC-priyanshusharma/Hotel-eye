@@ -52,10 +52,22 @@ class AppConfig(BaseSettings):
     FRAME_SKIP: int = Field(default=3)
     MODEL_PATH: str = Field(default="detection/yolo11n.pt")
     CONFIDENCE_THRESHOLD: float = Field(default=0.4)
+    INFERENCE_BACKEND: str = Field(
+        default="openvino",
+        description="Inference strategy: openvino, coreml, onnx, or tensorrt."
+    )
+    TRACKER_BACKEND: str = Field(
+        default="bytetrack",
+        description="Tracker strategy: bytetrack or botsort."
+    )
+    FACE_BACKEND: str = Field(
+        default="insightface",
+        description="Face embedding strategy: insightface."
+    )
     
     UNTRACKED_CAMERAS: List[str] = Field(
         default=["Screen Recording"],
-        description="List of camera substrings that should bypass ByteTrack to avoid confidence thresholds filtering out low-conf objects (e.g. weapons)."
+        description="List of camera substrings that should bypass ByteTrack to avoid confidence thresholds filtering out low-conf objects."
     )
     
     CAMERA_CONFIDENCE_THRESHOLDS: dict = Field(
@@ -108,17 +120,7 @@ class AppConfig(BaseSettings):
     def get_zone_for_camera(self, camera_id: str) -> list:
         return self.RESTRICTED_ZONES.get(camera_id, self.RESTRICTED_ZONES.get("default"))
         
-    # Dictionary of camera_id to list of polygon points for Queues
-    QUEUE_ZONES: dict = Field(
-        default={
-            # Default queue zone (left side of the frame)
-            "default": [(0, 100), (300, 100), (300, 1000), (0, 1000)]
-        }
-    )
-    
-    def get_queue_zone_for_camera(self, camera_id: str) -> list:
-        return self.QUEUE_ZONES.get(camera_id, self.QUEUE_ZONES.get("default"))
-        
+
     # Dictionary of camera_id to line segment ((x1, y1), (x2, y2))
     CHECKIN_LINES: dict = Field(
         default={
@@ -148,7 +150,20 @@ class AppConfig(BaseSettings):
     
     def get_parking_spots_for_camera(self, camera_id: str) -> list:
         return self.PARKING_SPOTS.get(camera_id, self.PARKING_SPOTS.get("default"))
+        
+    # Dictionary of camera_id (or substring) to list of allowed plugins. Empty list or no key = all plugins.
+    CAMERA_PLUGINS: dict = Field(
+        default={
+            "hlo.mp4": ["ANPRPlugin"]
+        }
+    )
     
+    def get_allowed_plugins(self, camera_id: str) -> list:
+        for cam, plugins in self.CAMERA_PLUGINS.items():
+            if cam in camera_id:
+                return plugins
+        return []
+
 config = AppConfig()
 
 import redis

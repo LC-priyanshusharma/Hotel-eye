@@ -1,7 +1,15 @@
-from sqlalchemy import Column, Integer, String, DateTime, func, Index
+from sqlalchemy import Column, Integer, String, DateTime, func, Index, Boolean
 from sqlalchemy.dialects.postgresql import JSONB
 from database.session import Base
 from datetime import datetime
+
+class Camera(Base):
+    __tablename__ = "cameras"
+    id = Column(String, primary_key=True)
+    name = Column(String, nullable=False)
+    rtsp_url = Column(String, unique=True, nullable=False)
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
 class CameraEvent(Base):
     __tablename__ = "camera_events"

@@ -65,13 +65,10 @@ class PlateHistoryResponse(BaseModel):
         from_attributes = True
 
 class PlateStatisticsResponse(BaseModel):
-    id: str
-    date_bucket: str
-    camera_id: str
-    total_detections: int
-    unique_plates: int
+    total_reads_today: int
+    unique_vehicles: int
     watchlist_matches: int
-    metrics_json: Optional[Dict[str, Any]] = None
+    average_accuracy: float
 
     class Config:
         orm_mode = True

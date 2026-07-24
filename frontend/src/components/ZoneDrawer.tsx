@@ -17,7 +17,17 @@ interface ZoneDrawerProps {
 
 export function ZoneDrawer({ streamUrl, points, onChange, title, nativeWidth = 1920, nativeHeight = 1080 }: ZoneDrawerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
   const [localPoints, setLocalPoints] = useState<Point[]>(points || []);
+
+  // Aggressively clear the MJPEG stream to avoid maxing out browser connection limits
+  useEffect(() => {
+    return () => {
+      if (imgRef.current) {
+        imgRef.current.src = '';
+      }
+    };
+  }, []);
 
   // Update local if props change (unless user is currently editing)
   useEffect(() => {
@@ -95,6 +105,7 @@ export function ZoneDrawer({ streamUrl, points, onChange, title, nativeWidth = 1
         ref={containerRef}
       >
         <img 
+          ref={imgRef}
           src={streamUrl} 
           alt="Live Stream" 
           className="w-full h-full object-cover cursor-crosshair opacity-80 group-hover:opacity-100 transition-opacity"

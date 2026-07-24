@@ -10,7 +10,7 @@ export function FireAnalytics() {
   useEffect(() => {
     const fetchEvents = async () => {
       try {
-        const res = await fetch('http://localhost:8000/api/fire/events', {
+        const res = await fetch('/api/fire/events', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           }
@@ -115,7 +115,7 @@ export function FireAnalytics() {
                   </span>
                   {event.snapshot_file && (
                     <img 
-                      src={`http://localhost:8000/snapshots/${event.snapshot_file}`} 
+                      src={`/snapshots/${event.snapshot_file}`} 
                       alt="Fire Snapshot" 
                       className="w-24 h-16 object-cover rounded border border-danger/30" 
                     />

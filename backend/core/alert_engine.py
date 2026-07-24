@@ -22,7 +22,7 @@ class AlertEngine:
 
     def _is_critical(self, event_type: str, alerts: List[str]) -> bool:
         """Determines if the event warrants an external notification."""
-        critical_alerts = {"FIRE_DETECTED", "SMOKE_DETECTED", "WEAPON_DETECTED", "INTRUSION_DETECTED"}
+        critical_alerts = {"FIRE_DETECTED", "INTRUSION_DETECTED"}
         
         for alert in alerts:
             if alert in critical_alerts:

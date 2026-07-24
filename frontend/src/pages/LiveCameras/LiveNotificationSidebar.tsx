@@ -16,7 +16,7 @@ const getCategoryFromTitle = (title: string) => {
   const upper = title?.toUpperCase() || ""
   if (upper.includes("CHECK IN") || upper.includes("CHECK OUT") || upper.includes("ATTENDANCE")) return "ATTENDANCE"
   if (upper.includes("INTRUSION")) return "INTRUSION"
-  if (upper.includes("SMOKE") || upper.includes("FIRE")) return "SAFETY ALERT"
+  if (upper.includes("FIRE")) return "SAFETY ALERT"
   if (upper.includes("PERSON COUNT") || upper.includes("PEOPLE")) return "PEOPLE COUNT"
   return "EVENT"
 }
@@ -27,7 +27,7 @@ export function LiveNotificationSidebar() {
   useEffect(() => {
     const fetchEvents = async () => {
       try {
-        const res = await fetch('http://localhost:8000/events')
+        const res = await fetch('/events')
         if (res.ok) {
           const dbEvents = await res.json()
           

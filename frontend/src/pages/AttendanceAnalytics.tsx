@@ -10,7 +10,7 @@ export function AttendanceAnalytics() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch('http://localhost:8000/api/attendance/stats', {
+        const res = await fetch('/api/attendance/stats', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           }

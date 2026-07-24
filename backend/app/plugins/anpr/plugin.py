@@ -4,12 +4,11 @@ from typing import List, Dict, Any
 from loguru import logger
 
 from app.engine.base import BaseDetectionPlugin, FrameData, TrackerContext, DetectionEvent
-from app.plugins.anpr.detector import PlateDetector
-from app.plugins.anpr.ocr import PPOCRWrapper
+from app.plugins.anpr.factory import ANPRFactory
 from app.plugins.anpr.tracker import ANPRTracker
 from app.plugins.anpr.validator import PlateValidator
 from app.plugins.anpr.service import anpr_service
-from app.plugins.anpr.config import anpr_config
+from app.plugins.anpr.config_parser import anpr_app_config
 from app.plugins.anpr.utils import save_snapshot
 from app.plugins.anpr.events import ANPREventType
 
@@ -21,10 +20,10 @@ class ANPRPlugin(BaseDetectionPlugin):
     """
     def __init__(self, app_config=None):
         super().__init__(app_config)
-        self.plate_detector = PlateDetector(model_path=anpr_config.detector_model_path, conf_threshold=anpr_config.detector_conf_threshold)
-        self.ocr_engine = PPOCRWrapper(use_gpu=anpr_config.ocr_use_gpu, lang=anpr_config.ocr_lang)
-        self.tracker = ANPRTracker(track_timeout=anpr_config.track_timeout_seconds)
-        logger.info("Initialized ANPRPlugin with PP-OCRv5 and Temporal Fusion.")
+        self.plate_detector = ANPRFactory.get_plate_detector()
+        self.ocr_engine = ANPRFactory.get_ocr_engine()
+        self.tracker = ANPRTracker(track_timeout=anpr_app_config.fusion.track_timeout_seconds)
+        logger.info("Initialized ANPRPlugin via ANPRFactory.")
         
         # Start the background service for DB logging if there's a loop
         try:
@@ -91,7 +90,8 @@ class ANPRPlugin(BaseDetectionPlugin):
             vehicle_track.update(timestamp)
             
             if not vehicle_track.best_vehicle_snapshot:
-                vehicle_track.best_vehicle_snapshot = save_snapshot(vehicle_crop, prefix="veh")
+                # Store the raw numpy array, the background service will handle saving it
+                vehicle_track.best_vehicle_snapshot = vehicle_crop.copy()
             
             for plate_crop, p_conf, p_bbox in plates:
                 # 3. OCR Extraction
@@ -101,11 +101,11 @@ class ANPRPlugin(BaseDetectionPlugin):
                     raw_text = res["text"]
                     ocr_conf = res["confidence"]
                     
-                    if ocr_conf < anpr_config.min_ocr_confidence:
+                    if ocr_conf < anpr_app_config.ocr.confidence_threshold:
                         continue
                         
                     # 4. Validation & Repair
-                    is_valid, repaired_text = PlateValidator.repair_and_validate(raw_text)
+                    is_valid, repaired_text = PlateValidator.repair_and_validate(raw_text, confidence=ocr_conf)
                     
                     if is_valid and repaired_text:
                         # 5. Temporal Fusion
@@ -114,7 +114,39 @@ class ANPRPlugin(BaseDetectionPlugin):
                         # Save the best plate snapshot dynamically based on highest OCR conf seen
                         if not hasattr(vehicle_track, 'max_ocr_seen') or ocr_conf > vehicle_track.max_ocr_seen:
                             vehicle_track.max_ocr_seen = ocr_conf
-                            vehicle_track.best_plate_snapshot = save_snapshot(plate_crop, prefix="plate")
+                            vehicle_track.best_plate_snapshot = plate_crop.copy()
+
+            # Emit a live event so the plate and vehicle box are drawn in the frontend
+            best_plate, best_conf = vehicle_track.fusion.get_best_plate()
+            if best_plate:
+                live_event = DetectionEvent(
+                    plugin_name=self.plugin_name,
+                    event_type="LIVE_TRACKING",
+                    camera_id=camera_id,
+                    timestamp=timestamp,
+                    confidence=best_conf,
+                    metadata={
+                        "plate_number": best_plate,
+                        "vehicle_type": getattr(vehicle_track, 'vehicle_type', 'Vehicle'),
+                        "drawings": [
+                            {
+                                "type": "rect",
+                                "coords": vehicle_box.tolist(),
+                                "color": [0, 255, 0],
+                                "thickness": 2
+                            },
+                            {
+                                "type": "text",
+                                "coords": [vehicle_box[0], max(0, vehicle_box[1] - 10)],
+                                "text": f"{best_plate} ({best_conf:.2f})",
+                                "color": [255, 255, 255],
+                                "thickness": 2,
+                                "scale": 0.8
+                            }
+                        ]
+                    }
+                )
+                events.append(live_event)
 
         # 6. Cleanup Stale Tracks and Emit Final Events
         events.extend(self._cleanup_and_emit(camera_id, timestamp))
@@ -141,11 +173,8 @@ class ANPRPlugin(BaseDetectionPlugin):
                     "plate_snapshot": track.best_plate_snapshot
                 }
                 
-                try:
-                    loop = asyncio.get_running_loop()
-                    loop.create_task(anpr_service.enqueue_finalized_track({"track_info": track_info}))
-                except RuntimeError:
-                    pass
+                import threading
+                threading.Thread(target=anpr_service._handle_track, args=({"track_info": track_info},), daemon=True).start()
                 
                 # Emit WebSocket Event for real-time frontend
                 event = DetectionEvent(

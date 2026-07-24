@@ -10,7 +10,8 @@ from app.plugins.visitor.schemas import VisitorResponse, VisitResponse, VisitorE
 from app.plugins.visitor.models import Visitor, Visit, VisitorEvent
 from pydantic import BaseModel
 from datetime import datetime
-from face.detector import FaceDetector
+from config.config import config
+from detection.face_factory import FaceFactory
 
 import uuid
 import base64
@@ -25,9 +26,9 @@ def decode_base64_image(b64_str: str):
     nparr = np.frombuffer(img_data, np.uint8)
     return cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-def get_next_visitor_id(db: Session) -> str:
-    # Get all visitor IDs that start with VIS-
-    visitors = db.query(Visitor.visitor_id).filter(Visitor.visitor_id.like("VIS-%")).all()
+def get_next_visitor_id(db: Session, prefix: str = "VIS") -> str:
+    # Get all visitor IDs that start with the prefix
+    visitors = db.query(Visitor.visitor_id).filter(Visitor.visitor_id.like(f"{prefix}-%")).all()
     
     max_num = 0
     for (vid,) in visitors:
@@ -42,7 +43,7 @@ def get_next_visitor_id(db: Session) -> str:
             pass
             
     next_num = max_num + 1
-    return f"VIS-{next_num:04d}"
+    return f"{prefix}-{next_num:04d}"
 
 # Global Singleton to avoid loading model on every request
 _global_detector = None
@@ -50,7 +51,7 @@ _global_detector = None
 def get_detector():
     global _global_detector
     if _global_detector is None:
-        _global_detector = FaceDetector(model_name='buffalo_s')
+        _global_detector = FaceFactory.create(config.FACE_BACKEND)
     return _global_detector
 
 @router.post("/register", response_model=VisitorResponse)
@@ -90,7 +91,9 @@ def register_visitor(request: VisitorRegisterRequest, db: Session = Depends(get_
     
     # Save the best image
     os.makedirs("snapshots/visitors", exist_ok=True)
-    visitor_uid = get_next_visitor_id(db)
+    role = request.role.upper() if request.role else "VISITOR"
+    prefix = "EMP" if role == "EMPLOYEE" else "VIS"
+    visitor_uid = get_next_visitor_id(db, prefix)
     photo_path = f"snapshots/visitors/{visitor_uid}.jpg"
     if best_image is not None:
         cv2.imwrite(photo_path, best_image)
@@ -101,7 +104,8 @@ def register_visitor(request: VisitorRegisterRequest, db: Session = Depends(get_
         email=request.email,
         photo=photo_path,
         face_embedding=avg_embedding.tolist(),
-        status="REGISTERED"
+        status="REGISTERED",
+        role=role
     )
     db.add(new_visitor)
     db.commit()
@@ -118,7 +122,7 @@ def register_visitor(request: VisitorRegisterRequest, db: Session = Depends(get_
             
         LATEST_DATA["SYSTEM"]["events"]["VisitorPlugin"].append({
             "plugin": "VisitorPlugin",
-            "event_type": "NEW_VISITOR_REGISTERED",
+            "event_type": VisitorEventType.EMPLOYEE_REGISTERED.value if role == "EMPLOYEE" else VisitorEventType.VISITOR_REGISTERED.value,
             "camera_id": "SYSTEM",
             "timestamp": new_visitor.created_at.timestamp() if new_visitor.created_at else time.time(),
             "confidence": 1.0,
@@ -167,10 +171,13 @@ def bulk_delete_visitors(request: BulkDeleteRequest, db: Session = Depends(get_d
     return {"status": "success", "deleted_count": deleted_count}
 
 @router.get("", response_model=PaginatedVisitorResponse)
-def get_visitors(db: Session = Depends(get_db), limit: int = 50, page: int = 1):
+def get_visitors(db: Session = Depends(get_db), limit: int = 50, page: int = 1, role: str = None):
     offset = (page - 1) * limit
     
     query = db.query(Visitor).filter(Visitor.status == "REGISTERED")
+    if role:
+        query = query.filter(Visitor.role == role.upper())
+        
     total = query.count()
     
     data = query.order_by(Visitor.created_at.desc()).offset(offset).limit(limit).all()

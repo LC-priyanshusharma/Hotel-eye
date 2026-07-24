@@ -22,7 +22,8 @@ export const useCameraStateStore = create<CameraStateStore>((set, get) => ({
     if (ws) return;
     
     console.log("Connecting to WebSocket...");
-    ws = new WebSocket('ws://localhost:8000/ws/events');
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${protocol}//${window.location.host}/ws/events`);
     
     ws.onopen = () => {
       console.log("WebSocket connected");

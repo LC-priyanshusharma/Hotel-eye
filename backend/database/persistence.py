@@ -30,14 +30,15 @@ class DatabaseWorker:
         
         self.alert_engine = AlertEngine()
         
-        from config.config import redis_client
-        self.redis = redis_client
+        from core.events.bus import RedisEventBus
+        from config.config import config
+        self.event_bus = RedisEventBus(config.REDIS_URL)
         self.stream_name = "logiceye:events"
         self.group_name = "db_writers"
         
         # Ensure consumer group exists
         try:
-            self.redis.xgroup_create(self.stream_name, self.group_name, id='0', mkstream=True)
+            self.event_bus.client.xgroup_create(self.stream_name, self.group_name, id='0', mkstream=True)
         except Exception:
             pass # Group already exists
 
@@ -50,7 +51,16 @@ class DatabaseWorker:
         with engine.connect() as conn:
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
             conn.commit()
-        Base.metadata.create_all(bind=engine)
+        # Run Alembic migrations automatically instead of create_all
+        try:
+            from alembic.config import Config
+            from alembic import command
+            import os
+            alembic_cfg = Config(os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic.ini"))
+            command.upgrade(alembic_cfg, "head")
+            logger.info("Successfully ran Alembic migrations.")
+        except Exception as e:
+            logger.error(f"Failed to run Alembic migrations: {e}")
         
         self._thread = threading.Thread(target=self._run, daemon=True, name="DatabaseWorker")
         self._thread.start()
@@ -67,7 +77,7 @@ class DatabaseWorker:
         if not events:
             return False
             
-        ignored_events = {None, "info", "PERSON_COUNT", "PARKING_STATS", "QUEUE_STATS", "ATTENDANCE_STATE", "TAMPER_OK", "VISITOR_TRACK"}
+        ignored_events = {None, "info", "PERSON_COUNT", "PARKING_STATS", "ATTENDANCE_STATE", "VISITOR_TRACK"}
             
         for plugin_name, data in events.items():
             if isinstance(data, dict):
@@ -90,30 +100,29 @@ class DatabaseWorker:
         while self.is_running:
             try:
                 # Read from Redis stream (block for 100ms)
-                messages = self.redis.xreadgroup(self.group_name, "db_worker_1", {self.stream_name: ">"}, count=10, block=100)
+                messages = self.event_bus.subscribe_group(self.group_name, "db_worker_1", self.stream_name, count=10, block=100)
                 
-                if messages:
-                    for stream, msgs in messages:
-                        for msg_id, msg_data in msgs:
-                            try:
-                                packet = json.loads(msg_data["data"])
-                                
-                                # Only write to DB if the event is actionable
-                                if self._is_actionable(packet["events"]):
-                                    db_event = CameraEvent(
-                                        camera_id=packet["camera_id"],
-                                        timestamp=datetime.fromtimestamp(packet["timestamp"], timezone.utc),
-                                        events=packet["events"]
-                                    )
-                                    batch.append(db_event)
-                                    
-                                    # Dispatch critical external alerts (SMS/Email) asynchronously
-                                    self.alert_engine.process_events(packet["camera_id"], packet["events"])
-                                    
-                                # Acknowledge the message
-                                self.redis.xack(self.stream_name, self.group_name, msg_id)
-                            except Exception as e:
-                                logger.error(f"Error parsing redis message: {e}")
+                for msg in messages:
+                    try:
+                        msg_id = msg["id"]
+                        packet = msg["data"]
+                        
+                        # Only write to DB if the event is actionable
+                        if self._is_actionable(packet["events"]):
+                            db_event = CameraEvent(
+                                camera_id=packet["camera_id"],
+                                timestamp=datetime.fromtimestamp(packet["timestamp"], timezone.utc),
+                                events=packet["events"]
+                            )
+                            batch.append(db_event)
+                            
+                            # Dispatch critical external alerts (SMS/Email) asynchronously
+                            self.alert_engine.process_events(packet["camera_id"], packet["events"])
+                            
+                        # Acknowledge the message
+                        self.event_bus.ack(self.stream_name, self.group_name, msg_id)
+                    except Exception as e:
+                        logger.error(f"Error parsing redis message: {e}")
                 
             except Exception as e:
                 logger.error(f"Error processing event from Redis for DB: {e}")

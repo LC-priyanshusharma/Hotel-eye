@@ -5,14 +5,16 @@ class EventService:
     @staticmethod
     def get_latest_events():
         """Returns the latest historical events from the database."""
+        from repositories.event_repository import EventRepository
         db = SessionLocal()
         try:
-            known_cameras = db.query(CameraEvent.camera_id).distinct().all()
+            repo = EventRepository(db)
+            known_cameras = repo.get_distinct_camera_ids()
             result = []
             
             for (cam_id,) in known_cameras:
                 # Fetch up to 20 to ensure we bypass duplicates
-                cam_events = db.query(CameraEvent).filter(CameraEvent.camera_id == cam_id).order_by(CameraEvent.timestamp.desc()).limit(20).all()
+                cam_events = repo.get_recent_events_by_camera(cam_id, limit=20)
                 
                 valid_cam_events = []
                 last_desc = None
@@ -26,18 +28,6 @@ class EventService:
                         if "FIRE_DETECTED" in active_alerts:
                             event_type = "danger"
                             description = "Fire Detected"
-                        elif "SMOKE_DETECTED" in active_alerts:
-                            event_type = "danger"
-                            description = "Smoke Detected"
-                            
-                    if "WeaponDetectionPlugin" in e.events:
-                        active_alerts = e.events["WeaponDetectionPlugin"].get("active_alerts", [])
-                        new_snapshots = e.events["WeaponDetectionPlugin"].get("new_snapshots", [])
-                        if "WEAPON_DETECTED" in active_alerts:
-                            event_type = "danger"
-                            description = "Weapon Detected"
-                            if new_snapshots:
-                                snapshot_file = new_snapshots[0]
                             
                     if "IntrusionDetectionPlugin" in e.events:
                         for event in e.events["IntrusionDetectionPlugin"]:
@@ -81,6 +71,16 @@ class EventService:
                                 description = f"Gesture: {top_gesture}"
                                 if gesture_data.get("snapshot_file"):
                                     snapshot_file = "/" + gesture_data.get("snapshot_file")
+                                    
+                    if "ANPRPlugin" in e.events:
+                        for event in e.events["ANPRPlugin"]:
+                            if event.get("event_type") == "LIVE_TRACKING":
+                                metadata = event.get("metadata", {})
+                                plate_num = metadata.get("plate_number")
+                                if plate_num:
+                                    event_type = "info"
+                                    description = f"Plate Detected: {plate_num}"
+                                break
 
                     # Skip spammy analytics updates at the API level
                     if description == "Analytics Update":
@@ -112,19 +112,17 @@ class EventService:
 
     @staticmethod
     def get_dashboard_stats(active_cameras_count: int):
+        from repositories.event_repository import EventRepository
         db = SessionLocal()
         critical_alerts = 0
         try:
+            repo = EventRepository(db)
             # Just grab the last 1000 events to estimate recent critical alerts
-            events = db.query(CameraEvent).order_by(CameraEvent.timestamp.desc()).limit(1000).all()
+            events = repo.get_recent_events(limit=1000)
             for e in events:
                 if "EnterpriseSafetyPlugin" in e.events:
                     active = e.events["EnterpriseSafetyPlugin"].get("active_alerts", [])
-                    if "FIRE_DETECTED" in active or "SMOKE_DETECTED" in active:
-                        critical_alerts += 1
-                if "WeaponDetectionPlugin" in e.events:
-                    active = e.events["WeaponDetectionPlugin"].get("active_alerts", [])
-                    if "WEAPON_DETECTED" in active:
+                    if "FIRE_DETECTED" in active:
                         critical_alerts += 1
         finally:
             db.close()

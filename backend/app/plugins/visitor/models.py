@@ -10,6 +10,7 @@ class Visitor(Base):
     visitor_id = Column(String, primary_key=True, index=True)
     google_form_submission_id = Column(String, index=True, nullable=True)
     name = Column(String, index=True)
+    role = Column(String, default="VISITOR", index=True) # VISITOR or EMPLOYEE
     email = Column(String, nullable=True)
     phone = Column(String, nullable=True)
     photo = Column(String, nullable=True)
