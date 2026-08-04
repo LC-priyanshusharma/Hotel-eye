@@ -1,11 +1,11 @@
-import { Search, Bell, Settings, Maximize, User, Moon, Sun, LogOut, Activity } from 'lucide-react'
+import { Search, Bell, Settings, Maximize, User, Moon, Sun, LogOut, Activity, Palette } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 
 export function TopNav() {
-  const { theme, toggleTheme, toggleRightPanel } = useAppStore()
+  const { theme, cycleTheme, toggleRightPanel } = useAppStore()
   const { user, logout } = useAuth()
   const [time, setTime] = useState(new Date())
   
@@ -39,12 +39,11 @@ export function TopNav() {
           animate={{ opacity: 1, x: 0 }}
           className="flex items-center gap-3 cursor-pointer group"
         >
-          <div className="relative">
-             <div className="absolute inset-0 bg-primary rounded-full blur-md opacity-40 group-hover:opacity-80 transition-opacity" />
-             <Activity className="w-6 h-6 text-primary relative z-10" />
+          <div className="relative flex items-center justify-center">
+             <img src="/lc_logo.png" alt="LC Logo" className="w-8 h-8 rounded relative z-10" />
           </div>
           <span className="font-bold text-lg tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">
-            LogicEye
+            Logic Clutch
           </span>
         </motion.div>
         
@@ -53,10 +52,10 @@ export function TopNav() {
           <input 
             type="text" 
             placeholder="Command / Search cameras..." 
-            className="w-full bg-[#111111]/80 backdrop-blur-md border border-white/10 rounded-full py-1.5 pl-9 pr-4 text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all text-white placeholder:text-muted-foreground/70 shadow-inner"
+            className="w-full bg-muted/80 backdrop-blur-md border border-foreground/10 rounded-full py-1.5 pl-9 pr-4 text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all text-white placeholder:text-muted-foreground/70 shadow-inner"
           />
           <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
-            <kbd className="hidden sm:inline-flex items-center gap-1 rounded border border-white/10 bg-white/5 px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+            <kbd className="hidden sm:inline-flex items-center gap-1 rounded border border-foreground/10 bg-foreground/5 px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
               <span className="text-xs">⌘</span>K
             </kbd>
           </div>
@@ -90,26 +89,48 @@ export function TopNav() {
           <div className="flex flex-col items-end"><span>GPU</span><span className="text-white font-bold">0%</span></div>
         </div>
 
-        <motion.button whileHover={{ scale: 1.1, rotate: 15 }} whileTap={{ scale: 0.95 }} onClick={toggleTheme} className="p-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/5 transition-colors text-muted-foreground hover:text-foreground">
-          {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+        <motion.button 
+          whileHover={{ scale: 1.1 }} 
+          whileTap={{ scale: 0.95 }} 
+          onClick={cycleTheme} 
+          className="relative w-9 h-9 flex items-center justify-center rounded-full bg-foreground/5 hover:bg-foreground/10 border border-foreground/5 transition-colors overflow-hidden group"
+          title={`Current Theme: ${theme.charAt(0).toUpperCase() + theme.slice(1)}`}
+        >
+          <AnimatePresence mode="wait">
+            {theme === 'dark' && (
+              <motion.div key="dark" initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1, rotate: 0 }} exit={{ y: -20, opacity: 0, rotate: -45 }} transition={{ duration: 0.2 }}>
+                <Moon className="w-4 h-4 text-primary" />
+              </motion.div>
+            )}
+            {theme === 'light' && (
+              <motion.div key="light" initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1, rotate: 0 }} exit={{ y: -20, opacity: 0, rotate: 45 }} transition={{ duration: 0.2 }}>
+                <Sun className="w-4 h-4 text-warning" />
+              </motion.div>
+            )}
+            {theme === 'colorful' && (
+              <motion.div key="colorful" initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1, rotate: 360 }} exit={{ scale: 0, opacity: 0 }} transition={{ duration: 0.4 }}>
+                <Palette className="w-4 h-4 text-accent" />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.button>
         
-        <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }} onClick={toggleFullscreen} className="p-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/5 transition-colors text-muted-foreground hover:text-foreground">
+        <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }} onClick={toggleFullscreen} className="p-2 rounded-full bg-foreground/5 hover:bg-foreground/10 border border-foreground/5 transition-colors text-muted-foreground hover:text-foreground">
           <Maximize className="w-4 h-4" />
         </motion.button>
         
-        <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }} onClick={toggleRightPanel} className="relative p-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/5 transition-colors text-muted-foreground hover:text-foreground">
+        <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }} onClick={toggleRightPanel} className="relative p-2 rounded-full bg-foreground/5 hover:bg-foreground/10 border border-foreground/5 transition-colors text-muted-foreground hover:text-foreground">
           <Bell className="w-4 h-4" />
           <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-danger animate-pulse glow-danger" />
         </motion.button>
         
         {isAdmin && (
-          <motion.button whileHover={{ scale: 1.1, rotate: 90 }} whileTap={{ scale: 0.95 }} className="p-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/5 transition-colors text-muted-foreground hover:text-foreground">
+          <motion.button whileHover={{ scale: 1.1, rotate: 90 }} whileTap={{ scale: 0.95 }} className="p-2 rounded-full bg-foreground/5 hover:bg-foreground/10 border border-foreground/5 transition-colors text-muted-foreground hover:text-foreground">
             <Settings className="w-4 h-4" />
           </motion.button>
         )}
         
-        <div className="flex items-center gap-3 ml-2 border-l border-white/10 pl-5">
+        <div className="flex items-center gap-3 ml-2 border-l border-foreground/10 pl-5">
           <div className="flex flex-col items-end hidden sm:flex">
             <span className="text-sm font-semibold text-foreground tracking-wide">{user?.email || 'Admin'}</span>
             <span className="text-[10px] text-primary uppercase tracking-widest">{user?.roles?.[0] || 'Administrator'}</span>

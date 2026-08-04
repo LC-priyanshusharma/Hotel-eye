@@ -13,9 +13,7 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
-  define: {
-    'process.env': {}
-  },
+
   server: {
     allowedHosts: true,
     proxy: {
@@ -24,6 +22,14 @@ export default defineConfig({
         changeOrigin: true
       },
       '/auth': {
+        target: 'http://localhost:8000',
+        changeOrigin: true
+      },
+      '/users': {
+        target: 'http://localhost:8000',
+        changeOrigin: true
+      },
+      '/roles': {
         target: 'http://localhost:8000',
         changeOrigin: true
       },
@@ -43,7 +49,7 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true
       },
-      '/cameras': {
+      '/kill-stream': {
         target: 'http://localhost:8000',
         changeOrigin: true
       },

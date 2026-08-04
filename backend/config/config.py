@@ -26,7 +26,7 @@ class AppConfig(BaseSettings):
     
     # Database Settings
     DATABASE_URL: str = Field(
-        default="postgresql://admin:admin@localhost:5432/cctv",
+        default="postgresql://admin:admin@localhost:5433/cctv",
         description="PostgreSQL Connection String"
     )
     REDIS_URL: str = Field(
@@ -36,7 +36,7 @@ class AppConfig(BaseSettings):
     
     # Camera Settings (comma separated if multiple)
     CAMERA_URLS: str = Field(
-        default="0",
+        default="CHECK IN.mp4,CHECK OUT.mp4",
         description="Comma-separated list of RTSP URLs, video file paths, or camera indices."
     )
     
@@ -53,8 +53,8 @@ class AppConfig(BaseSettings):
     MODEL_PATH: str = Field(default="detection/yolo11n.pt")
     CONFIDENCE_THRESHOLD: float = Field(default=0.4)
     INFERENCE_BACKEND: str = Field(
-        default="openvino",
-        description="Inference strategy: openvino, coreml, onnx, or tensorrt."
+        default="onnx",
+        description="Inference strategy: openvino, coreml, onnx, tensorrt, or pytorch."
     )
     TRACKER_BACKEND: str = Field(
         default="bytetrack",
@@ -66,12 +66,16 @@ class AppConfig(BaseSettings):
     )
     
     UNTRACKED_CAMERAS: List[str] = Field(
-        default=["Screen Recording"],
+        default=["Screen Recording", "332263_medium.mp4"],
         description="List of camera substrings that should bypass ByteTrack to avoid confidence thresholds filtering out low-conf objects."
     )
     
     CAMERA_CONFIDENCE_THRESHOLDS: dict = Field(
-        default={"Screen Recording": 0.1},
+        default={
+            "Screen Recording": 0.1,
+            "CAM-5DD5A521": 0.01,  # Legacy ID
+            "332263_medium.mp4": 0.01 # Lower threshold for carton counting
+        },
         description="Camera-specific confidence thresholds. Overrides CONFIDENCE_THRESHOLD if matched."
     )
     
@@ -113,12 +117,17 @@ class AppConfig(BaseSettings):
             # Lobby camera (121): Top Left
             "rtsp://admin:Snap@1222@192.168.1.121/stream1": [(100, 100), (600, 100), (600, 600), (100, 600)],
             # Room camera (122): No intrusion zone for the room!
-            "rtsp://admin:Snap@1222@192.168.1.122/stream1": []
+            "rtsp://admin:Snap@1222@192.168.1.122/stream1": [],
+            # Intrusion camera (576x1024 portrait): Zone covers the room interior past the glass gate
+            "WhatsApp Video 2026-07-27 at 14.55.41.mp4": [(50, 400), (530, 400), (530, 950), (50, 950)]
         }
     )
     
     def get_zone_for_camera(self, camera_id: str) -> list:
-        return self.RESTRICTED_ZONES.get(camera_id, self.RESTRICTED_ZONES.get("default"))
+        for cam, zone in self.RESTRICTED_ZONES.items():
+            if cam != "default" and cam in camera_id:
+                return zone
+        return self.RESTRICTED_ZONES.get("default")
         
 
     # Dictionary of camera_id to line segment ((x1, y1), (x2, y2))
@@ -144,25 +153,61 @@ class AppConfig(BaseSettings):
                 [(1500, 800), (1600, 800), (1600, 1000), (1500, 1000)], # Spot 1
                 [(1610, 800), (1710, 800), (1710, 1000), (1610, 1000)], # Spot 2
                 [(1720, 800), (1820, 800), (1820, 1000), (1720, 1000)], # Spot 3
+            ],
+            "PARKING.mp4": [
+                [[100, 300], [1800, 300], [1800, 500], [100, 500]],
+                [[100, 600], [1800, 600], [1800, 800], [100, 800]]
             ]
         }
     )
     
     def get_parking_spots_for_camera(self, camera_id: str) -> list:
-        return self.PARKING_SPOTS.get(camera_id, self.PARKING_SPOTS.get("default"))
+        for cam, spots in self.PARKING_SPOTS.items():
+            if cam != "default" and cam in camera_id:
+                return spots
+        return self.PARKING_SPOTS.get("default")
         
-    # Dictionary of camera_id (or substring) to list of allowed plugins. Empty list or no key = all plugins.
+    @staticmethod
+    def _get_state_file_path() -> str:
+        import os
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        return os.path.join(base_dir, "camera_plugins_state.json")
+
+    @staticmethod
+    def load_plugins_state() -> dict:
+        import json
+        import os
+        try:
+            state_file = AppConfig._get_state_file_path()
+            if os.path.exists(state_file):
+                with open(state_file, "r") as f:
+                    return json.load(f)
+        except Exception as e:
+            pass
+        return {}
+
+    def save_plugins_state(self):
+        import json
+        try:
+            state_file = self._get_state_file_path()
+            with open(state_file, "w") as f:
+                json.dump(self.CAMERA_PLUGINS, f)
+        except Exception as e:
+            pass
+
+    # Load from state file instead of defaulting to empty to prevent amnesia on hot-reload
     CAMERA_PLUGINS: dict = Field(
-        default={
-            "hlo.mp4": ["ANPRPlugin"]
-        }
+        default_factory=load_plugins_state
     )
     
+    # Line Crossing Config
+    LINE_CROSSING_Y: int = Field(default=600, description="Y-coordinate for the line crossing")
+    LINE_CROSSING_X_START: int = Field(default=750, description="Starting X coordinate of the line (e.g. left edge of the door)")
+    LINE_CROSSING_X_END: int = Field(default=1150, description="Ending X coordinate of the line (e.g. right edge of the door)")
+    LINE_CROSSING_DIRECTION: str = Field(default="down", description="Direction to count: up, down, or both")
+    
     def get_allowed_plugins(self, camera_id: str) -> list:
-        for cam, plugins in self.CAMERA_PLUGINS.items():
-            if cam in camera_id:
-                return plugins
-        return []
+        return self.CAMERA_PLUGINS.get(camera_id, [])
 
 config = AppConfig()
 

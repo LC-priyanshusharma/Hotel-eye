@@ -25,7 +25,7 @@ class RedisEventBus(IEventBus):
     def publish(self, channel: str, message: Dict[str, Any]) -> None:
         # Convert dictionary to JSON string to store in stream payload under 'data' key
         payload = {"data": json.dumps(message)}
-        self.client.xadd(channel, payload)
+        self.client.xadd(channel, payload, maxlen=10000)
         
     def subscribe(self, channel: str, last_id: str = "$", count: int = 10, block: int = 1000) -> List[Any]:
         # returns format like: [[b'channel_name', [(b'12345-0', {b'data': b'...'}), ...]]]
@@ -42,8 +42,8 @@ class RedisEventBus(IEventBus):
                         try:
                             parsed_data = json.loads(payload['data'])
                             results.append({"id": msg_id, "data": parsed_data})
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.error(f"Failed to decode Redis message: {e}")
         return results
 
     def subscribe_group(self, group_name: str, consumer_name: str, channel: str, count: int = 10, block: int = 100) -> List[Any]:
@@ -58,8 +58,8 @@ class RedisEventBus(IEventBus):
                         try:
                             parsed_data = json.loads(payload['data'])
                             results.append({"id": msg_id, "data": parsed_data})
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.error(f"Failed to decode Redis message: {e}")
         return results
         
     def ack(self, channel: str, group_name: str, msg_id: str) -> None:

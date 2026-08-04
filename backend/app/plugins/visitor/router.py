@@ -8,6 +8,7 @@ from typing import List
 from database.session import get_db
 from app.plugins.visitor.schemas import VisitorResponse, VisitResponse, VisitorEventResponse, VisitorRegisterRequest, PaginatedVisitorResponse
 from app.plugins.visitor.models import Visitor, Visit, VisitorEvent
+from app.plugins.visitor.events import VisitorEventType
 from pydantic import BaseModel
 from datetime import datetime
 from config.config import config
@@ -160,8 +161,9 @@ def bulk_delete_visitors(request: BulkDeleteRequest, db: Session = Depends(get_d
         if v.photo and os.path.exists(v.photo):
             try:
                 os.remove(v.photo)
-            except Exception:
-                pass
+            except OSError as e:
+                import logging
+                logging.warning(f"Failed to delete visitor photo {v.photo}: {e}")
                 
         # 4. Delete the visitor
         db.delete(v)

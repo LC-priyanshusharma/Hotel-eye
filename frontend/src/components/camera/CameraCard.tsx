@@ -1,4 +1,4 @@
-import { Maximize, Camera as CameraIcon, Video, Crosshair, Mic, Volume2, Settings, PictureInPicture, Signal, Users, SlidersHorizontal, Check } from 'lucide-react'
+import { Maximize, Camera as CameraIcon, Video, VideoOff, Crosshair, Mic, Volume2, Settings, PictureInPicture, Signal, Users, SlidersHorizontal, Check, Play, Square, Zap, Box } from 'lucide-react'
 import { memo, useEffect, useState } from 'react'
 import { cn } from '@/utils/utils'
 import { motion } from 'framer-motion'
@@ -6,109 +6,11 @@ import { VideoPlayer } from './VideoPlaceholder'
 import { useAppStore } from '@/store/useAppStore'
 import { useToastStore } from '@/store/useToastStore'
 import { useCameraStateStore } from '@/store/useCameraStateStore'
+import { api } from '@/api/api'
 
-const AVAILABLE_PLUGINS = [
-  "ANPRPlugin",
-  "ParkingDetectionPlugin",
-  "IntrusionDetectionPlugin",
-  "PeopleCountingPlugin",
-  "AttendanceDetectionPlugin",
-  "EnterpriseSafetyPlugin",
+import { PluginManagerModal } from './PluginManagerModal'
 
-  "GestureDetectionPlugin"
-];
-
-const CameraFeatureFilter = ({ cameraId }: { cameraId: string }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [allowedPlugins, setAllowedPlugins] = useState<string[]>([]);
-  const [isAll, setIsAll] = useState(true);
-
-  useEffect(() => {
-    fetch('/api/config')
-      .then(res => res.json())
-      .then(data => {
-        const plugins = data?.CAMERA_PLUGINS?.[cameraId];
-        if (plugins && Array.isArray(plugins) && plugins.length > 0) {
-          setAllowedPlugins(plugins);
-          setIsAll(false);
-        } else {
-          setIsAll(true);
-        }
-      });
-  }, [cameraId]);
-
-  const togglePlugin = (pluginName: string) => {
-    let newPlugins = [...allowedPlugins];
-    if (isAll) {
-      newPlugins = AVAILABLE_PLUGINS.filter(p => p !== pluginName);
-      setIsAll(false);
-    } else {
-      if (newPlugins.includes(pluginName)) {
-        newPlugins = newPlugins.filter(p => p !== pluginName);
-      } else {
-        newPlugins.push(pluginName);
-      }
-    }
-    
-    if (newPlugins.length === 0) {
-      setIsAll(true);
-      newPlugins = [];
-    }
-
-    setAllowedPlugins(newPlugins);
-    fetch('/api/config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        updates: {
-          CAMERA_PLUGINS: {
-            [cameraId]: newPlugins
-          }
-        }
-      })
-    });
-  };
-
-  return (
-    <div className="relative pointer-events-auto">
-      <button 
-        onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }}
-        className="p-1.5 bg-black/40 hover:bg-primary/40 rounded backdrop-blur border border-white/10 transition-colors"
-        title="Filter Features"
-      >
-        <SlidersHorizontal size={14} className="text-white" />
-      </button>
-      
-      {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-56 bg-black/90 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden shadow-2xl z-50 p-2" onClick={(e) => e.stopPropagation()}>
-          <div className="text-xs font-bold text-white/50 mb-2 px-2 uppercase tracking-wider">Active Analytics</div>
-          <div className="max-h-60 overflow-y-auto flex flex-col gap-1">
-            {AVAILABLE_PLUGINS.map(plugin => {
-              const active = isAll || allowedPlugins.includes(plugin);
-              return (
-                <button
-                  key={plugin}
-                  onClick={() => togglePlugin(plugin)}
-                  className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/10 text-left w-full transition-colors"
-                >
-                  <div className={`w-4 h-4 rounded border flex items-center justify-center ${active ? 'bg-primary border-primary' : 'border-white/20'}`}>
-                    {active && <Check size={12} className="text-white" />}
-                  </div>
-                  <span className={`text-xs ${active ? 'text-white' : 'text-white/50'}`}>
-                    {plugin.replace('Plugin', '')}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-
-export const CameraCard = memo(({ id, name, location }: any) => {
+export const CameraCard = memo(({ id, name, location, pipelineStatus: parentPipelineStatus = "Stopped" }: any) => {
   const { activeCameraId, setActiveCamera } = useAppStore()
   const { addToast } = useToastStore()
   const personCount = useCameraStateStore(state => {
@@ -121,28 +23,84 @@ export const CameraCard = memo(({ id, name, location }: any) => {
     }
     return 0;
   })
-  
+
+  const cartonCount = useCameraStateStore(state => {
+    const events = state.states[id]?.events?.CartonCountingPlugin;
+    if (!events) return 0;
+    for (const event of events) {
+      if (event.event_type === "CARTON_STATS") {
+        return event.metadata?.total_cartons_counted || 0;
+      }
+    }
+    return 0;
+  })
   const isActive = activeCameraId === id;
+  const [pipelineStatus, setPipelineStatus] = useState<string>(parentPipelineStatus)
+  const [isPluginModalOpen, setIsPluginModalOpen] = useState(false)
+  const [isToggling, setIsToggling] = useState(false)
+  const [lastToggleTime, setLastToggleTime] = useState<number>(0)
+  
+  const telemetry = useCameraStateStore(state => state.states[id])
+  const fps = telemetry?.fps || 0
+  const latency = telemetry?.latency_ms || 0
+
+  useEffect(() => {
+    // Sync from parent polling, but ignore it for 8 seconds after a toggle
+    // to prevent reverting to a stale state before the next poll completes.
+    if (!isToggling && Date.now() - lastToggleTime > 8000) {
+      setPipelineStatus(parentPipelineStatus)
+    }
+  }, [parentPipelineStatus, isToggling, lastToggleTime])
+
+  const togglePipeline = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (isToggling) return // Prevent double-clicks
+    setIsToggling(true)
+    const endpoint = pipelineStatus === "Stopped" ? "/api/cameras/start" : "/api/cameras/stop"
+    const newStatus = pipelineStatus === "Stopped" ? "Connecting/Offline" : "Stopped"
+    
+    try {
+      setPipelineStatus(newStatus)
+      setLastToggleTime(Date.now())
+      await api.post(endpoint, { camera_id: id })
+      addToast({
+        title: "Success",
+        message: `Camera ${pipelineStatus === "Stopped" ? 'start initiated' : 'stopped'}.`,
+        type: "success"
+      })
+    } catch (err: any) {
+      // Revert if failed
+      setPipelineStatus(pipelineStatus)
+      addToast({
+        title: "Error",
+        message: err.response?.data?.detail || "Action failed.",
+        type: "danger"
+      })
+    } finally {
+      setTimeout(() => setIsToggling(false), 2000)
+    }
+  }
 
   return (
     <div 
       className={cn(
         "w-full h-full relative group overflow-hidden rounded-2xl transition-all duration-500",
-        isActive ? "ring-2 ring-primary glow-primary border-transparent glass-pro shadow-[0_0_40px_rgba(0,112,243,0.3)]" : "glass hover-lift border border-white/5 hover:border-white/20"
+        isActive ? "ring-2 ring-primary glow-primary border-transparent glass-pro shadow-[0_0_40px_rgba(0,112,243,0.3)]" : "glass hover-lift border border-foreground/5 hover:border-foreground/20"
       )}
       onClick={() => setActiveCamera(isActive ? null : id)}
     >
       {/* Top Overlay */}
-      <div className="absolute top-0 inset-x-0 p-4 bg-gradient-to-b from-black/80 via-black/40 to-transparent z-10 flex justify-between items-start pointer-events-none transition-opacity duration-300">
+      <div className="absolute top-0 inset-x-0 p-4 bg-gradient-to-b from-black/80 via-black/40 to-transparent z-30 flex justify-between items-start pointer-events-none transition-opacity duration-300">
         <div className="flex flex-col gap-2">
           <div className="flex flex-col gap-1.5">
             <span className="font-bold text-sm text-white drop-shadow-lg flex items-center gap-2 tracking-wide">
               {name}
-              <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded text-white/70 uppercase tracking-widest">{location}</span>
+              <span className="text-[10px] bg-foreground/10 px-2 py-0.5 rounded text-foreground/70 uppercase tracking-widest">{location}</span>
             </span>
             <div className="flex gap-2">
               <span className="flex items-center gap-1.5 text-[10px] bg-danger/20 text-danger border border-danger/30 px-2 py-0.5 rounded shadow-sm uppercase font-black tracking-widest">
-                <span className="w-1.5 h-1.5 rounded-full bg-danger animate-pulse glow-danger" /> LIVE
+                <span className="w-1.5 h-1.5 rounded-full bg-danger animate-pulse glow-danger" /> 
+                LIVE {fps > 0 ? fps : '--'} FPS
               </span>
               <span className="flex items-center gap-1.5 text-[10px] bg-accent/20 text-accent border border-accent/30 px-2 py-0.5 rounded shadow-sm uppercase font-black tracking-widest glow-accent">
                 AI ACTIVE
@@ -160,11 +118,7 @@ export const CameraCard = memo(({ id, name, location }: any) => {
               <button 
                 onClick={(e) => { 
                   e.stopPropagation();
-                  fetch('/events/manual', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ camera_id: id, event_type: 'info', description: `Manual check-in recorded for ${name}` })
-                  });
+                  api.post('/events/manual', { camera_id: id, event_type: 'info', description: `Manual check-in recorded for ${name}` })
                   addToast({ title: 'Checked In', message: `Manual check-in recorded for ${name}`, type: 'success', cameraName: name })
                 }}
                 className="px-2 py-1 bg-success/90 hover:bg-success text-success-foreground text-[10px] font-bold rounded shadow-sm transition-colors border border-success/50"
@@ -175,11 +129,7 @@ export const CameraCard = memo(({ id, name, location }: any) => {
               <button 
                 onClick={(e) => { 
                   e.stopPropagation();
-                  fetch('/events/manual', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ camera_id: id, event_type: 'warning', description: `Manual check-out recorded for ${name}` })
-                  });
+                  api.post('/events/manual', { camera_id: id, event_type: 'warning', description: `Manual check-out recorded for ${name}` })
                   addToast({ title: 'Checked Out', message: `Manual check-out recorded for ${name}`, type: 'warning', cameraName: name })
                 }}
                 className="px-2 py-1 bg-danger/90 hover:bg-danger text-danger-foreground text-[10px] font-bold rounded shadow-sm transition-colors border border-danger/50"
@@ -194,8 +144,33 @@ export const CameraCard = memo(({ id, name, location }: any) => {
         {/* Top Right: Controls & Info */}
         <div className="flex flex-col items-end gap-1.5 pointer-events-none">
           <div className="flex items-center gap-1.5 pointer-events-auto">
-            <CameraFeatureFilter cameraId={id} />
-            <div className="flex items-center gap-1.5 text-[10px] bg-black/60 border border-white/10 px-2 py-1 rounded backdrop-blur-sm text-white font-mono shadow-md">
+            <button 
+              onClick={togglePipeline}
+              disabled={isToggling}
+              className={cn(
+                "p-1.5 rounded backdrop-blur border border-foreground/10 transition-colors flex items-center gap-1 text-[10px] font-bold shadow-md",
+                isToggling ? "bg-foreground/30 text-white/50 cursor-wait" :
+                pipelineStatus === "Stopped" ? "bg-success/80 hover:bg-success text-white" : "bg-danger/80 hover:bg-danger text-white"
+              )}
+              title={isToggling ? 'Processing...' : pipelineStatus === "Stopped" ? 'Start Pipeline' : 'Stop Pipeline'}
+            >
+              {isToggling ? (
+                <><div className="w-3 h-3 border-2 border-white/50 border-t-white rounded-full animate-spin" /> WAIT</>
+              ) : pipelineStatus === "Stopped" ? (
+                <><Play className="w-3 h-3 fill-current" /> START</>
+              ) : (
+                <><Square className="w-3 h-3 fill-current" /> STOP</>
+              )}
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setIsPluginModalOpen(true); }}
+              className="px-2 py-1.5 bg-primary/20 hover:bg-primary/40 text-primary border border-primary/30 rounded backdrop-blur transition-colors flex items-center gap-1.5 text-[10px] font-bold shadow-[0_0_10px_rgba(0,112,243,0.2)] uppercase tracking-widest pointer-events-auto"
+              title="Manage Analytics Plugins"
+            >
+              <Zap className="w-3 h-3 fill-current" />
+              Analytics
+            </button>
+            <div className="flex items-center gap-1.5 text-[10px] bg-background/60 border border-foreground/10 px-2 py-1 rounded backdrop-blur-sm text-white font-mono shadow-md pointer-events-auto">
               <Users className="w-3 h-3 text-primary" />
               <span className="font-semibold text-gray-300">CW:</span>
               <span className={cn(
@@ -205,23 +180,52 @@ export const CameraCard = memo(({ id, name, location }: any) => {
                 {personCount}
               </span>
             </div>
+            
+            {cartonCount > 0 && (
+              <div className="flex items-center gap-1.5 text-[10px] bg-background/60 border border-foreground/10 px-2 py-1 rounded backdrop-blur-sm text-white font-mono shadow-md pointer-events-auto">
+                <Box className="w-3 h-3 text-orange-500" />
+                <span className="font-semibold text-gray-300">BOX:</span>
+                <span className="font-bold text-orange-400">
+                  {cartonCount}
+                </span>
+              </div>
+            )}
+            
             <Signal className="w-4 h-4 text-success drop-shadow-md" />
           </div>
         </div>
       </div>
 
       {/* Video Content */}
-      <VideoPlayer cameraId={id} streamUrl="mock" poster="https://images.unsplash.com/photo-1577962917302-cd874c4e31d2?auto=format&fit=crop&q=80&w=640" />
+      <div className="relative w-full h-full">
+        {pipelineStatus === 'Connected' ? (
+          <VideoPlayer cameraId={id} streamUrl="mock" poster="https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=800&q=80" />
+        ) : pipelineStatus === 'Connecting/Offline' ? (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black animate-pulse text-foreground/50">
+            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mb-4" />
+            <span className="text-xs font-bold tracking-widest uppercase">Connecting...</span>
+          </div>
+        ) : pipelineStatus === 'Error' ? (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-danger/5 text-danger border border-danger/10">
+            <Zap className="w-8 h-8 mb-2 opacity-50" />
+            <span className="text-sm font-bold tracking-widest uppercase">Stream Offline</span>
+          </div>
+        ) : (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-background/90 text-foreground/50">
+            <VideoOff className="w-12 h-12 mb-4 opacity-50" />
+            <span className="font-mono text-sm tracking-widest">CAMERA STOPPED</span>
+          </div>
+        )}
+      </div>
 
       {/* Bottom Overlay - Telemetry HUD */}
-      <div className="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-black/90 via-black/50 to-transparent z-10 flex justify-between items-end pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-        <div className="flex gap-5 text-[10px] text-white/50 font-mono tracking-widest">
-          <span className="flex flex-col gap-0.5"><span>FPS</span><strong className="text-white text-xs">60</strong></span>
-          <span className="flex flex-col gap-0.5"><span>LATENCY</span><strong className="text-success text-xs">12ms</strong></span>
+      <div className="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-black/90 via-black/50 to-transparent z-10 flex justify-between items-end pointer-events-none">
+        <div className="flex gap-5 text-[10px] text-foreground/50 font-mono tracking-widest">
+          <span className="flex flex-col gap-0.5"><span>LATENCY</span><strong className={cn("text-xs", latency > 100 ? "text-danger" : latency > 50 ? "text-warning" : "text-success")}>{latency > 0 ? `${latency}ms` : '--'}</strong></span>
           <span className="flex flex-col gap-0.5"><span>BITRATE</span><strong className="text-white text-xs">4.2M</strong></span>
-          <span className="flex flex-col gap-0.5"><span>RES</span><strong className="text-white text-xs">4K</strong></span>
+          <span className="flex flex-col gap-0.5"><span>RES</span><strong className="text-white text-xs">1080p</strong></span>
         </div>
-        <span className="text-[10px] text-white/30 font-mono uppercase tracking-widest">ID:{id.substring(0,8)}</span>
+        <span className="text-[10px] text-foreground/30 font-mono uppercase tracking-widest">ID:{id.substring(0,8)}</span>
       </div>
 
       {/* Floating Controls (Right) */}
@@ -240,14 +244,20 @@ export const CameraCard = memo(({ id, name, location }: any) => {
           { icon: PictureInPicture, label: 'PIP', action: () => addToast({ title: 'Picture-in-Picture', message: 'Feature coming soon.', type: 'default' }) },
           { icon: Settings, label: 'Settings', action: () => addToast({ title: 'Hardware Error', message: 'Hardware not supported by this camera model.', type: 'danger' }) }
         ].map((btn, i) => (
-          <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} key={i} onClick={(e) => { e.stopPropagation(); btn.action(e); }} className="p-2 bg-black/60 hover:bg-primary backdrop-blur-sm border border-white/10 rounded-lg text-white/80 hover:text-white transition-all shadow-lg group/btn relative">
+          <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} key={i} onClick={(e) => { e.stopPropagation(); btn.action(e); }} className="p-2 bg-background/60 hover:bg-primary backdrop-blur-sm border border-foreground/10 rounded-lg text-foreground/80 hover:text-white transition-all shadow-lg group/btn relative">
             <btn.icon className="w-4 h-4" />
-            <span className="absolute right-full mr-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-black/80 text-[10px] rounded opacity-0 group-hover/btn:opacity-100 pointer-events-none whitespace-nowrap">
+            <span className="absolute right-full mr-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-background/80 text-[10px] rounded opacity-0 group-hover/btn:opacity-100 pointer-events-none whitespace-nowrap">
               {btn.label}
             </span>
           </motion.button>
         ))}
       </motion.div>
+
+      <PluginManagerModal 
+        cameraId={id} 
+        isOpen={isPluginModalOpen} 
+        onClose={() => setIsPluginModalOpen(false)} 
+      />
     </div>
   )
 })

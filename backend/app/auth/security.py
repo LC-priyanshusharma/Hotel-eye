@@ -30,16 +30,15 @@ def create_access_token(
     }
     
     # We will need SECRET_KEY and ALGORITHM in config.py
-    # Fallbacks provided to prevent crashes before config is updated
-    secret = getattr(config, "SECRET_KEY", "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7")
-    algorithm = getattr(config, "ALGORITHM", "HS256")
+    secret = config.SECRET_KEY
+    algorithm = config.ALGORITHM
     
     encoded_jwt = jwt.encode(to_encode, secret, algorithm=algorithm)
     return encoded_jwt
 
 def decode_access_token(token: str) -> dict:
-    secret = getattr(config, "SECRET_KEY", "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7")
-    algorithm = getattr(config, "ALGORITHM", "HS256")
+    secret = config.SECRET_KEY
+    algorithm = config.ALGORITHM
     try:
         decoded_token = jwt.decode(token, secret, algorithms=[algorithm])
         return decoded_token

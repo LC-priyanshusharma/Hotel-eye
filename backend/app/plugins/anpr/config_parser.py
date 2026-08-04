@@ -4,10 +4,12 @@ from pydantic import BaseModel
 from typing import List
 
 class OCRConfig(BaseModel):
-    provider: str = "paddle"
-    model_path: str = ""
+    provider: str = "awiros"
+    local_model_path: str = "models/awiros"
+    download_if_missing: bool = True
     use_gpu: bool = False
-    confidence_threshold: float = 0.5
+    confidence_threshold: float = 0.55
+    fallback_provider: str = "paddle"
 
 class PlateDetectorConfig(BaseModel):
     provider: str = "yolo"

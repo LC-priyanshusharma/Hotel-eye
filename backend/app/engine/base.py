@@ -20,6 +20,7 @@ class FrameData:
     camera_id: str
     timestamp: float
     faces: List[Any] = field(default_factory=list)
+    camera_url: str = ""
 
 class TrackerContext:
     # A simple context object passed to plugins allowing them to store

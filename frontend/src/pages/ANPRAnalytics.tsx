@@ -41,29 +41,39 @@ export default function ANPRAnalytics() {
   // WebSocket connection for live events from the unified stream
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/events`);
+    const token = localStorage.getItem('access_token') || '';
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/events?token=${encodeURIComponent(token)}`);
     ws.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data);
+        const payload = JSON.parse(event.data);
         let newEvents: ANPREvent[] = [];
-        Object.values(data).forEach((camData: any) => {
-          if (camData.events && camData.events['ANPRPlugin']) {
-            camData.events['ANPRPlugin'].forEach((evt: any) => {
-              if (evt.event_type === 'LIVE_TRACKING') {
-                newEvents.push({
-                  ...evt,
-                  plate_number: evt.metadata?.plate_number || 'UNKNOWN',
-                  vehicle_type: evt.metadata?.vehicle_type
-                });
-              }
-            });
-          }
-        });
+        
+        if (payload.type === 'telemetry' && payload.states) {
+          Object.values(payload.states).forEach((camData: any) => {
+            if (camData.events && camData.events['ANPRPlugin']) {
+              camData.events['ANPRPlugin'].forEach((evt: any) => {
+                if (evt.event_type === 'LIVE_TRACKING') {
+                  newEvents.push({
+                    ...evt,
+                    plate_number: evt.metadata?.plate_number || 'UNKNOWN',
+                    vehicle_type: evt.metadata?.vehicle_type,
+                    vehicle_snapshot: evt.metadata?.vehicle_snapshot
+                  });
+                }
+              });
+            }
+          });
+        }
         if (newEvents.length > 0) {
           setLiveEvents(prev => {
             const combined = [...newEvents, ...prev];
-            // Remove duplicates by plate+timestamp just in case
-            const unique = Array.from(new Map(combined.map(item => [`${item.plate_number}-${item.timestamp}`, item])).values());
+            // Keep only the newest event for each unique plate
+            const seen = new Set();
+            const unique = combined.filter(item => {
+              if (seen.has(item.plate_number)) return false;
+              seen.add(item.plate_number);
+              return true;
+            });
             return unique.slice(0, 10);
           });
         }
@@ -132,7 +142,7 @@ export default function ANPRAnalytics() {
               <div key={idx} className="bg-zinc-950 border border-zinc-800 p-3 rounded-lg flex gap-3 animate-in fade-in slide-in-from-right-4">
                 <div className="w-20 h-20 bg-zinc-800 rounded flex-shrink-0 overflow-hidden">
                   {evt.vehicle_snapshot ? (
-                     <img src={`/${evt.vehicle_snapshot}`} className="w-full h-full object-cover" alt="Vehicle" />
+                     <img src={evt.vehicle_snapshot.startsWith('data:') ? evt.vehicle_snapshot : `/${evt.vehicle_snapshot}`} className="w-full h-full object-cover" alt="Vehicle" />
                   ) : <Car className="w-full h-full p-4 text-zinc-600" />}
                 </div>
                 <div className="flex-1">
@@ -193,6 +203,7 @@ export default function ANPRAnalytics() {
                     <th className="pb-3 font-medium">Time</th>
                     <th className="pb-3 font-medium">Camera</th>
                     <th className="pb-3 font-medium">Confidence</th>
+                    <th className="pb-3 font-medium">Images</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/50">
@@ -202,11 +213,16 @@ export default function ANPRAnalytics() {
                       <td className="py-3 text-zinc-300">{new Date(row.timestamp * 1000).toLocaleTimeString()}</td>
                       <td className="py-3 text-zinc-300">{row.camera_id}</td>
                       <td className="py-3 text-zinc-300">{(row.confidence * 100).toFixed(1)}%</td>
+                      <td className="py-3">
+                        {row.confidence === 1.0 && row.plate_snapshot && (
+                          <img src={`/${row.plate_snapshot}`} alt="Plate" className="h-8 w-auto rounded border border-zinc-700" />
+                        )}
+                      </td>
                     </tr>
                   ))}
                   {!history?.length && (
                     <tr>
-                      <td colSpan={4} className="py-8 text-center text-zinc-500">No records found</td>
+                      <td colSpan={5} className="py-8 text-center text-zinc-500">No records found</td>
                     </tr>
                   )}
                 </tbody>

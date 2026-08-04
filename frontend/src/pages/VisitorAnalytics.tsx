@@ -25,7 +25,8 @@ export default function VisitorAnalytics() {
 
     // Connect WebSocket
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws.current = new WebSocket(`${protocol}//${window.location.host}/ws/events`);
+    const token = localStorage.getItem('access_token') || '';
+    ws.current = new WebSocket(`${protocol}//${window.location.host}/ws/events?token=${encodeURIComponent(token)}`);
     ws.current.onmessage = (event) => {
       const data = JSON.parse(event.data);
       let newEvents: VisitorEvent[] = [];

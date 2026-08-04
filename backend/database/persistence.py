@@ -9,7 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime, timezone, timedelta
 
 from database.session import SessionLocal, engine, Base
-from models.models import CameraEvent
+from database.models.models import CameraEvent
 import app.plugins.visitor.models # Ensure visitor tables are registered
 import app.plugins.anpr.models # Ensure ANPR tables are registered
 from core.alert_engine import AlertEngine
@@ -39,29 +39,31 @@ class DatabaseWorker:
         # Ensure consumer group exists
         try:
             self.event_bus.client.xgroup_create(self.stream_name, self.group_name, id='0', mkstream=True)
-        except Exception:
-            pass # Group already exists
+        except Exception as e:
+            if "BUSYGROUP" not in str(e):
+                logger.warning(f"Error creating Redis consumer group (may already exist): {e}")
 
     def start(self):
         if self.is_running:
             return
         self.is_running = True
         
-        # Ensure tables exist (we will rely on Alembic for prod, but this is a failsafe)
+        # Ensure extensions exist (we rely on Alembic for prod, but this is a failsafe)
         with engine.connect() as conn:
-            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
-            conn.commit()
-        # Run Alembic migrations automatically instead of create_all
-        try:
-            from alembic.config import Config
-            from alembic import command
-            import os
-            alembic_cfg = Config(os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic.ini"))
-            command.upgrade(alembic_cfg, "head")
-            logger.info("Successfully ran Alembic migrations.")
-        except Exception as e:
-            logger.error(f"Failed to run Alembic migrations: {e}")
-        
+            try:
+                conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+                # Attempt to enable TimescaleDB and create hypertable for enterprise scaling
+                conn.execute(text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"))
+                conn.commit()
+                
+                # Check if it's already a hypertable, if not, convert it
+                conn.execute(text("SELECT create_hypertable('camera_events', 'timestamp', if_not_exists => TRUE);"))
+                conn.commit()
+                logger.info("TimescaleDB optimizations applied successfully.")
+            except Exception as e:
+                logger.debug(f"TimescaleDB not available or already configured: {e}")
+                conn.commit()
+
         self._thread = threading.Thread(target=self._run, daemon=True, name="DatabaseWorker")
         self._thread.start()
         logger.info("Started Database Worker thread.")
@@ -79,17 +81,33 @@ class DatabaseWorker:
             
         ignored_events = {None, "info", "PERSON_COUNT", "PARKING_STATS", "ATTENDANCE_STATE", "VISITOR_TRACK"}
             
-        for plugin_name, data in events.items():
-            if isinstance(data, dict):
-                if data.get("active_alerts") or data.get("event_type") not in ignored_events:
+        if isinstance(events, list):
+            for event in events:
+                if event.get("active_alerts") or event.get("event_type") not in ignored_events:
                     return True
-            elif isinstance(data, list):
-                for event in data:
-                    if event.get("event_type") not in ignored_events:
+        elif isinstance(events, dict):
+            for plugin_name, data in events.items():
+                if isinstance(data, dict):
+                    if data.get("active_alerts") or data.get("event_type") not in ignored_events:
                         return True
+                elif isinstance(data, list):
+                    for event in data:
+                        if event.get("event_type") not in ignored_events:
+                            return True
         return False
 
     def _run(self):
+        # Run Alembic migrations automatically in the worker thread to avoid asyncio.run() conflict
+        try:
+            from alembic.config import Config
+            from alembic import command
+            import os
+            alembic_cfg = Config(os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic.ini"))
+            command.upgrade(alembic_cfg, "head")
+            logger.info("Successfully ran Alembic migrations.")
+        except Exception as e:
+            logger.error(f"Failed to run Alembic migrations: {e}")
+
         logger.info("Database Worker active and listening for events...")
         
         batch = []

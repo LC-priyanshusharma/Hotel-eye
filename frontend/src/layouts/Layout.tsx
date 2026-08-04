@@ -11,10 +11,12 @@ export function Layout() {
   const { theme } = useAppStore()
 
   useEffect(() => {
+    document.documentElement.classList.remove('dark', 'theme-colorful')
+    
     if (theme === 'dark') {
       document.documentElement.classList.add('dark')
-    } else {
-      document.documentElement.classList.remove('dark')
+    } else if (theme === 'colorful') {
+      document.documentElement.classList.add('theme-colorful')
     }
   }, [theme])
 

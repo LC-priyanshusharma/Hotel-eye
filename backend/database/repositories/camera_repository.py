@@ -1,6 +1,6 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session
-from models.models import Camera
+from database.models.models import Camera
 
 class CameraRepository:
     def __init__(self, db: Session):
@@ -11,6 +11,12 @@ class CameraRepository:
         
     def get_by_url(self, rtsp_url: str) -> Optional[Camera]:
         return self.db.query(Camera).filter(Camera.rtsp_url == rtsp_url).first()
+
+    def get_by_name(self, name: str) -> Optional[Camera]:
+        return self.db.query(Camera).filter(Camera.name == name).first()
+        
+    def get_by_id(self, cam_id: str) -> Optional[Camera]:
+        return self.db.query(Camera).filter(Camera.id == cam_id).first()
         
     def add(self, camera: Camera) -> Camera:
         self.db.add(camera)

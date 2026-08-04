@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from main import app
 from database.session import Base, get_async_db
-from models.auth import User, Role, Permission
+from database.models.auth import User, Role, Permission
 from app.auth.security import get_password_hash
 
 # Use PostgreSQL test database

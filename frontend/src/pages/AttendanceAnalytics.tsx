@@ -61,9 +61,9 @@ export function AttendanceAnalytics() {
                 initial={{ opacity: 0, scale: 0.98 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: i * 0.1 }}
-                className="glass rounded-2xl border border-white/5 overflow-hidden flex flex-col group"
+                className="glass rounded-2xl border border-foreground/5 overflow-hidden flex flex-col group"
               >
-                <div className="p-6 bg-gradient-to-r from-emerald-500/10 to-transparent border-b border-white/5">
+                <div className="p-6 bg-gradient-to-r from-emerald-500/10 to-transparent border-b border-foreground/5">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-emerald-500/20 rounded-lg text-emerald-400">
@@ -96,7 +96,7 @@ export function AttendanceAnalytics() {
                 </div>
                 
                 <div className="p-6">
-                  <h4 className="text-sm font-semibold text-white/80 mb-4 flex items-center gap-2">
+                  <h4 className="text-sm font-semibold text-foreground/80 mb-4 flex items-center gap-2">
                     <Clock className="w-4 h-4" /> Live Action Logs
                   </h4>
                   
@@ -109,7 +109,7 @@ export function AttendanceAnalytics() {
                       {data.attendance_logs.slice().reverse().map((log: any, idx: number) => {
                         const isCheckIn = log.action === 'CHECK IN'
                         return (
-                          <div key={idx} className="flex items-center justify-between p-3 rounded-lg bg-black/40 border border-white/5">
+                          <div key={idx} className="flex items-center justify-between p-3 rounded-lg bg-background/40 border border-foreground/5">
                             <div className="flex items-center gap-3">
                               <div className={cn("p-1.5 rounded-full", isCheckIn ? "bg-emerald-500/20 text-emerald-400" : "bg-orange-500/20 text-orange-400")}>
                                 {isCheckIn ? <LogIn className="w-4 h-4" /> : <LogOut className="w-4 h-4" />}

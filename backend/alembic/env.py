@@ -12,9 +12,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from alembic import context
 from database.session import Base, async_engine
-import models.auth # Import auth models so metadata registers them
-import models.models # Import camera models so metadata registers them
-
+import database.models.auth # Import auth models so metadata registers them
+import database.models.models # Import camera models so metadata registers them
+import app.plugins.anpr.models
+import app.plugins.visitor.models
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config

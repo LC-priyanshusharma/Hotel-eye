@@ -13,12 +13,12 @@ function KPICard({ title, value, subValue, icon: Icon, trend, colorClass }: any)
     <motion.div 
       variants={fadeInUp}
       whileHover={{ y: -5, scale: 1.02 }}
-      className="glass-pro p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden group border border-white/5 cursor-pointer transition-all duration-300"
+      className="glass-pro p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden group border border-foreground/5 cursor-pointer transition-all duration-300"
     >
       <div className={cn("absolute top-0 right-0 w-24 h-24 bg-gradient-to-br opacity-20 group-hover:opacity-40 transition-opacity rounded-full blur-[40px] -mr-4 -mt-4", colorClass.replace('text-', 'from-'))} />
       <div className="flex justify-between items-start mb-4 relative z-10">
         <h3 className="text-xs font-bold tracking-widest uppercase text-muted-foreground drop-shadow-md">{title}</h3>
-        <div className={cn("p-2 rounded-xl bg-white/5 border border-white/10 group-hover:scale-110 transition-transform", colorClass)}>
+        <div className={cn("p-2 rounded-xl bg-foreground/5 border border-foreground/10 group-hover:scale-110 transition-transform", colorClass)}>
           <Icon className="w-4 h-4 drop-shadow-md" />
         </div>
       </div>
@@ -40,6 +40,7 @@ function KPICard({ title, value, subValue, icon: Icon, trend, colorClass }: any)
 export function Analytics() {
   const [data, setData] = useState<any>(null)
   const [activeTab, setActiveTab] = useState('All Events')
+  const [timelineData, setTimelineData] = useState<any[]>([])
 
   useEffect(() => {
     const fetchKPIs = async () => {
@@ -48,8 +49,28 @@ export function Analytics() {
         if (res.ok) setData(await res.json())
       } catch (err) {}
     }
+    
+    const fetchTimeline = async () => {
+      try {
+        const res = await fetch('/events')
+        if (res.ok) {
+          const events = await res.json()
+          // Aggregate events by hour/minute buckets
+          const buckets: Record<string, number> = {}
+          events.forEach((ev: any) => {
+             const d = new Date(ev.timestamp)
+             const timeStr = `${d.getHours().toString().padStart(2, '0')}:${(Math.floor(d.getMinutes() / 15) * 15).toString().padStart(2, '0')}`
+             buckets[timeStr] = (buckets[timeStr] || 0) + 1
+          })
+          const chartData = Object.entries(buckets).map(([time, count]) => ({ time, detections: count })).sort((a, b) => a.time.localeCompare(b.time))
+          setTimelineData(chartData.length > 0 ? chartData : [{ time: '—', detections: 0 }])
+        }
+      } catch (err) {}
+    }
+    
     fetchKPIs()
-    const int = setInterval(fetchKPIs, 5000)
+    fetchTimeline()
+    const int = setInterval(() => { fetchKPIs(); fetchTimeline() }, 5000)
     return () => clearInterval(int)
   }, [])
 
@@ -123,7 +144,7 @@ export function Analytics() {
       </div>
 
       <div className="mb-8">
-        <h2 className="text-lg font-semibold mb-4 text-white/90">Hardware Telemetry</h2>
+        <h2 className="text-lg font-semibold mb-4 text-foreground/90">Hardware Telemetry</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <KPICard title="CPU Usage" value={`${data.system_health.cpu_usage}%`} subValue="Avg load" icon={Cpu} colorClass="text-indigo-400" />
           <KPICard title="GPU Usage" value={`${data.system_health.gpu_usage}%`} subValue="CUDA Core" icon={Server} colorClass="text-purple-400" />
@@ -134,15 +155,11 @@ export function Analytics() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10 relative z-10">
-        <motion.div variants={fadeInUp} initial="hidden" animate="visible" className="glass-panel rounded-3xl p-6 h-[350px] flex flex-col border border-white/5 relative">
+        <motion.div variants={fadeInUp} initial="hidden" animate="visible" className="glass-panel rounded-3xl p-6 h-[350px] flex flex-col border border-foreground/5 relative">
           <h3 className="text-xs font-bold tracking-widest uppercase mb-6 text-foreground drop-shadow-md">AI Detection Timeline</h3>
           <div className="flex-1 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={[
-                { time: '10:00', detections: 12 }, { time: '10:15', detections: 15 },
-                { time: '10:30', detections: 45 }, { time: '10:45', detections: 22 },
-                { time: '11:00', detections: 8 }, { time: '11:15', detections: 34 }
-              ]}>
+              <AreaChart data={timelineData}>
                 <defs>
                   <linearGradient id="colorDetections" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="var(--color-primary)" stopOpacity={0.3}/>
@@ -158,9 +175,12 @@ export function Analytics() {
             </ResponsiveContainer>
           </div>
         </motion.div>
-        <motion.div variants={fadeInUp} initial="hidden" animate="visible" className="glass-panel rounded-3xl p-6 h-[350px] flex flex-col border border-white/5 relative">
+        <motion.div variants={fadeInUp} initial="hidden" animate="visible" className="glass-panel rounded-3xl p-6 h-[350px] flex flex-col border border-foreground/5 relative">
           <h3 className="text-xs font-bold tracking-widest uppercase mb-6 text-foreground drop-shadow-md">Camera Latency Heatmap</h3>
-          <div className="flex-1 w-full">
+          <div className="flex-1 w-full relative">
+            <div className="absolute inset-0 flex items-center justify-center bg-background/40 backdrop-blur-sm z-20 rounded-xl">
+              <span className="text-sm font-bold text-muted-foreground uppercase tracking-widest">Real-time Data Coming Soon</span>
+            </div>
             <ResponsiveContainer width="100%" height="100%">
               <ScatterChart>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
@@ -168,8 +188,7 @@ export function Analytics() {
                 <YAxis dataKey="latency" type="number" stroke="#666" tick={{fill: '#666', fontSize: 12}} tickLine={false} axisLine={false} name="Latency (ms)" />
                 <ZAxis dataKey="z" type="number" range={[50, 200]} />
                 <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ backgroundColor: 'rgba(10,10,10,0.8)', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '12px', backdropFilter: 'blur(10px)', color: '#fff' }} />
-                <Scatter name="Camera 1" data={[{time: '10:00', latency: 45, z: 2}, {time: '10:30', latency: 42, z: 2}, {time: '11:00', latency: 50, z: 2}]} fill="var(--color-success)" />
-                <Scatter name="Camera 2" data={[{time: '10:00', latency: 85, z: 2}, {time: '10:30', latency: 90, z: 2}, {time: '11:00', latency: 88, z: 2}]} fill="var(--color-warning)" />
+                <Scatter name="Camera 1" data={[]} fill="var(--color-success)" />
               </ScatterChart>
             </ResponsiveContainer>
           </div>
@@ -177,7 +196,7 @@ export function Analytics() {
       </div>
 
       {/* Analytics Submenu */}
-      <div className="flex gap-2 border-b border-white/10 mb-6 overflow-x-auto pb-2">
+      <div className="flex gap-2 border-b border-foreground/10 mb-6 overflow-x-auto pb-2">
         {['All Events', 'Attendance', 'Person Count', 'Intrusions', 'Safety Alerts'].map(tab => (
           <button
             key={tab}
@@ -186,7 +205,7 @@ export function Analytics() {
               "px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap",
               activeTab === tab 
                 ? "bg-primary text-primary-foreground shadow-md" 
-                : "text-muted-foreground hover:bg-white/5 hover:text-white"
+                : "text-muted-foreground hover:bg-foreground/5 hover:text-white"
             )}
           >
             {tab}
@@ -248,7 +267,7 @@ export function Events({ filter = 'All Events' }: { filter?: string }) {
             <input 
               type="text" 
               placeholder="Search events..." 
-              className="w-full bg-muted/50 border border-white/10 rounded-lg py-2 pl-9 pr-4 text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:bg-background transition-all text-white placeholder-white/30"
+              className="w-full bg-muted/50 border border-foreground/10 rounded-lg py-2 pl-9 pr-4 text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:bg-background transition-all text-white placeholder-white/30"
             />
           </div>
           <button className="flex items-center gap-2 px-4 py-2 bg-muted rounded-lg text-sm font-medium hover:bg-muted/80 transition-colors text-white">
@@ -265,23 +284,23 @@ export function Events({ filter = 'All Events' }: { filter?: string }) {
             acc[date] = (acc[date] || 0) + 1
             return acc
           }, {})).map(([date, count]) => (
-            <div key={date} className="glass border border-white/10 rounded-xl p-4 min-w-[150px] flex flex-col items-center justify-center">
+            <div key={date} className="glass border border-foreground/10 rounded-xl p-4 min-w-[150px] flex flex-col items-center justify-center">
               <span className="text-xs text-muted-foreground mb-1">{date}</span>
               <span className="text-2xl font-bold text-white">{String(count)}</span>
               <span className="text-xs text-info font-medium mt-1">Total People</span>
             </div>
           ))}
           {events.length === 0 && (
-            <div className="glass border border-white/10 rounded-xl p-4 w-full flex items-center justify-center text-muted-foreground text-sm">
+            <div className="glass border border-foreground/10 rounded-xl p-4 w-full flex items-center justify-center text-muted-foreground text-sm">
               No daily counts available yet.
             </div>
           )}
         </div>
       )}
 
-      <div className="glass rounded-2xl overflow-hidden border border-white/5 shadow-2xl">
-        <table className="w-full text-left text-sm text-white/90">
-          <thead className="bg-black/40 text-muted-foreground border-b border-white/10">
+      <div className="glass rounded-2xl overflow-hidden border border-foreground/5 shadow-2xl">
+        <table className="w-full text-left text-sm text-foreground/90">
+          <thead className="bg-background/40 text-muted-foreground border-b border-foreground/10">
             <tr>
               <th className="px-6 py-4 font-medium">Snapshot</th>
               <th className="px-6 py-4 font-medium">Timestamp</th>
@@ -292,16 +311,16 @@ export function Events({ filter = 'All Events' }: { filter?: string }) {
           </thead>
           <tbody className="divide-y divide-white/5">
             {events.map((ev, i) => (
-              <tr key={ev.id || i} className="hover:bg-white/5 transition-colors group">
+              <tr key={ev.id || i} className="hover:bg-foreground/5 transition-colors group">
                 <td className="px-6 py-4">
                   {ev.snapshot_file ? (
                     <img 
-                      src={`/snapshots/${ev.snapshot_file}`} 
+                      src={ev.snapshot_file.startsWith('/') ? ev.snapshot_file : `/${ev.snapshot_file}`} 
                       alt="Snapshot" 
-                      className="w-24 h-16 object-cover rounded shadow border border-white/10"
+                      className="w-20 h-14 object-contain rounded shadow border border-foreground/10 bg-black/40"
                     />
                   ) : (
-                    <div className="w-24 h-16 bg-white/5 rounded flex items-center justify-center text-xs text-muted-foreground">No Photo</div>
+                    <div className="w-24 h-16 bg-foreground/5 rounded flex items-center justify-center text-xs text-muted-foreground">No Photo</div>
                   )}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">{ev.timestamp?.replace('T', ' ')}</td>
@@ -310,7 +329,6 @@ export function Events({ filter = 'All Events' }: { filter?: string }) {
                     if (!ev.camera_id) return '';
                     if (ev.camera_id.includes('.mp4')) return 'Camera 1 Test Video';
                     if (ev.camera_id.includes('192.168.1.121')) return 'Camera 2 Lobby';
-                    if (ev.camera_id.includes('192.168.1.122')) return 'Camera 3 Room';
                     return ev.camera_id.split('/').pop();
                   })()}
                 </td>

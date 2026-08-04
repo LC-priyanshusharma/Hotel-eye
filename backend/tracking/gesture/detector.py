@@ -11,6 +11,10 @@ GestureRecognizer = mp.tasks.vision.GestureRecognizer
 GestureRecognizerOptions = mp.tasks.vision.GestureRecognizerOptions
 VisionRunningMode = mp.tasks.vision.RunningMode
 
+import threading
+
+_mp_lock = threading.Lock()
+
 class GestureDetector:
     def __init__(self, model_path: str = "models/gesture_recognizer.task"):
         self.model_path = model_path
@@ -43,7 +47,9 @@ class GestureDetector:
             # MediaPipe tasks expects RGB format. frame[..., ::-1] is a quick BGR->RGB conversion.
             rgb_frame = frame[..., ::-1].copy()
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
-            result = self.recognizer.recognize(mp_image)
+            
+            with _mp_lock:
+                result = self.recognizer.recognize(mp_image)
         except Exception as e:
             logger.error(f"Gesture recognition failed: {e}")
             return []

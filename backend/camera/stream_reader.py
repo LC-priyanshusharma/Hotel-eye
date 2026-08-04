@@ -7,6 +7,7 @@ from loguru import logger
 import numpy as np
 
 from config.config import config
+from camera.source import VideoSource
 
 class StreamReader:
     """
@@ -17,126 +18,99 @@ class StreamReader:
     macOS, Linux, and Windows.
     """
 
-    def __init__(self, source: str, buffer_size: int = config.FRAME_BUFFER_SIZE):
-        self.source = source
+    def __init__(self, video_source: VideoSource, camera_id: str, buffer_size: int = config.FRAME_BUFFER_SIZE):
+        self.source = video_source
+        self.camera_id = camera_id
         self.frame_buffer: queue.Queue = queue.Queue(maxsize=buffer_size)
         
         self.is_running = False
+        self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
-        self._cap: Optional[cv2.VideoCapture] = None
+
+        # Give source access to the stop event for interruptible reading
+        if hasattr(self.source, 'set_stop_event'):
+            self.source.set_stop_event(self._stop_event)
 
     def start(self) -> None:
         if self.is_running:
             return
         self.is_running = True
+        self._stop_event.clear()
         self._thread = threading.Thread(
             target=self._update, 
             daemon=True, 
-            name=f"CV2Reader-{self.source}"
+            name=f"CV2Reader-{self.camera_id}"
         )
         self._thread.start()
-        logger.info(f"Started OpenCV stream reader thread for source: {self.source}")
+        logger.info(f"Started OpenCV stream reader thread for source: {self.camera_id}")
 
     def stop(self) -> None:
         self.is_running = False
+        self._stop_event.set()
+        # Do NOT call self.source.release() here — OpenCV is NOT thread-safe.
+        # The thread's finally block will release it safely after exit.
         if self._thread and self._thread.is_alive():
-            self._thread.join(timeout=2.0)
-        self._release_capture()
-        logger.info(f"Stopped OpenCV stream reader for source: {self.source}")
-
-    def _release_capture(self) -> None:
-        if self._cap is not None:
-            self._cap.release()
-            self._cap = None
+            self._thread.join(timeout=1.0)
+        logger.info(f"Stopped OpenCV stream reader for source: {self.camera_id}")
 
     def _connect(self) -> bool:
-        self._release_capture()
-        
-        try:
-            logger.debug(f"Connecting to source: {self.source}...")
-            
-            # Handle Mac webcam specifically if source is "0"
-            if str(self.source) == "0":
-                import platform
-                if platform.system() == "Darwin":
-                    self._cap = cv2.VideoCapture(0, cv2.CAP_AVFOUNDATION)
-                else:
-                    self._cap = cv2.VideoCapture(0) # Default behavior
-            else:
-                self._cap = cv2.VideoCapture(self.source)
-            
-            if not self._cap.isOpened():
-                raise Exception("VideoCapture not opened")
-                
-            self.fps = self._cap.get(cv2.CAP_PROP_FPS)
-            if self.fps <= 0:
-                self.fps = 30.0
-            self.frame_delay = 1.0 / self.fps
-                
-            # Optional optimizations for RTSP
-            if str(self.source).startswith("rtsp://") or str(self.source).startswith("http"):
-                self._cap.set(cv2.CAP_PROP_BUFFERSIZE, 2)
-            
-            logger.info(f"Successfully connected to OpenCV source: {self.source} @ {self.fps} FPS")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to open source {self.source}: {e}")
-            self._release_capture()
-            return False
+        return self.source.connect()
 
     def _update(self) -> None:
         backoff_time = config.CAMERA_RECONNECT_DELAY_SECONDS
-        is_file = str(self.source).endswith('.mp4') or str(self.source).endswith('.avi')
 
-        while self.is_running:
-            if self._cap is None or not self._cap.isOpened():
-                if not self._connect():
-                    logger.warning(f"Connection failed. Retrying in {backoff_time}s...")
-                    time.sleep(backoff_time)
-                    backoff_time = min(backoff_time * 1.5, 30.0)
-                    continue
-                backoff_time = config.CAMERA_RECONNECT_DELAY_SECONDS
-
-            try:
-                start_time = time.perf_counter()
-                ret, frame = self._cap.read()
-                if not ret or frame is None:
-                    if is_file:
-                        self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        try:
+            while not self._stop_event.is_set():
+                if not self.source.is_opened():
+                    if not self.source.connect():
+                        logger.warning(f"Connection failed for {self.camera_id}. Retrying in {backoff_time}s...")
+                        if self._stop_event.wait(backoff_time):
+                            break
+                        backoff_time = min(backoff_time * 1.5, 30.0)
                         continue
-                        
-                    logger.warning(f"Failed to grab frame from {self.source}. Reconnecting...")
-                    self._release_capture()
-                    time.sleep(1.0)
-                    continue
-                
-                if self.frame_buffer.full():
-                    try:
-                        self.frame_buffer.get_nowait()
-                    except queue.Empty:
-                        pass
-                        
+                    backoff_time = config.CAMERA_RECONNECT_DELAY_SECONDS
+                    self.fps = self.source.fps
+
                 try:
-                    self.frame_buffer.put_nowait(frame)
-                except queue.Full:
-                    pass
+                    # Implement FRAME_SKIP optimization at the decoder level
+                    for _ in range(max(1, config.FRAME_SKIP)):
+                        if not self.source.grab():
+                            break
                     
-                if is_file:
-                    elapsed = time.perf_counter() - start_time
-                    sleep_time = self.frame_delay - elapsed
-                    if sleep_time > 0:
-                        time.sleep(sleep_time)
-                        
-            except Exception as e:
-                logger.error(f"Unexpected error in capture thread: {e}")
-                self._release_capture()
-                time.sleep(1.0)
-                continue
+                    ret, frame = self.source.retrieve()
+                    
+                    if not ret or frame is None:
+                        logger.warning(f"Failed to read frame from {self.camera_id}. Reconnecting...")
+                        self.source.release()
+                        if self._stop_event.wait(1.0):
+                            break
+                        continue
+                    
+                    # Non-blocking put
+                    capture_time = time.time()
+                    try:
+                        self.frame_buffer.put_nowait((capture_time, frame))
+                    except queue.Full:
+                        # Drop oldest frame to maintain low latency
+                        try:
+                            self.frame_buffer.get_nowait()
+                            self.frame_buffer.put_nowait((capture_time, frame))
+                        except queue.Empty:
+                            pass
+                            
+                except Exception as e:
+                    logger.error(f"Exception in stream reader for {self.camera_id}: {e}")
+                    self.source.release()
+                    if self._stop_event.wait(1.0):
+                        break
+                    continue
+        finally:
+            self.source.release()
             
     def read(self) -> Tuple[bool, Optional[np.ndarray]]:
         """Used for synchronous pulling if needed, though queues are preferred."""
         try:
-            frame = self.frame_buffer.get(timeout=0.01)
+            capture_time, frame = self.frame_buffer.get(timeout=0.01)
             return True, frame
         except queue.Empty:
             return False, None

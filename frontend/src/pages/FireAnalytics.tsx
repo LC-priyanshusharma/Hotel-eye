@@ -79,8 +79,8 @@ export function FireAnalytics() {
         </motion.div>
       )}
 
-      <div className="glass rounded-2xl border border-white/5 overflow-hidden">
-        <div className="p-6 border-b border-white/5 flex items-center gap-3">
+      <div className="glass rounded-2xl border border-foreground/5 overflow-hidden">
+        <div className="p-6 border-b border-foreground/5 flex items-center gap-3">
           <AlertTriangle className="w-5 h-5 text-orange-400" />
           <h3 className="text-lg font-bold text-white">Detection History</h3>
         </div>
@@ -92,7 +92,7 @@ export function FireAnalytics() {
         ) : (
           <div className="divide-y divide-white/5 max-h-[600px] overflow-y-auto">
             {events.map((event) => (
-              <div key={event.id} className="p-6 hover:bg-white/5 transition-colors flex items-center justify-between group">
+              <div key={event.id} className="p-6 hover:bg-foreground/5 transition-colors flex items-center justify-between group">
                 <div className="flex items-center gap-6">
                   <div className="p-3 bg-orange-500/10 text-orange-400 rounded-xl group-hover:bg-orange-500/20 transition-colors">
                     <Flame className="w-6 h-6" />
@@ -110,7 +110,7 @@ export function FireAnalytics() {
                 </div>
                 
                 <div className="text-right flex items-center gap-4">
-                  <span className="text-xs font-mono text-muted-foreground bg-black/40 px-3 py-1.5 rounded-lg border border-white/5">
+                  <span className="text-xs font-mono text-muted-foreground bg-background/40 px-3 py-1.5 rounded-lg border border-foreground/5">
                     {event.fire_boxes?.length || 0} cluster(s) tracked
                   </span>
                   {event.snapshot_file && (

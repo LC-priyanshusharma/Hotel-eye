@@ -1,4 +1,4 @@
-import { LayoutDashboard, Video, PlaySquare, AlertTriangle, BarChart2, Map, Users, Settings, LifeBuoy, Server, Database, ChevronLeft, ChevronRight, Trash2, Clock, Car, BadgeCheck, Flame, UserCheck, UserPlus } from 'lucide-react'
+import { LayoutDashboard, Video, PlaySquare, AlertTriangle, BarChart2, Map, Users, Settings, LifeBuoy, Server, Database, ChevronLeft, ChevronRight, Trash2, Clock, Car, BadgeCheck, Flame, UserCheck, UserPlus, ShieldAlert, Box } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
 import { cn } from '@/utils/utils'
 import { Link, useLocation } from 'react-router-dom'
@@ -9,7 +9,9 @@ const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
   { icon: Video, label: 'Live Cameras', path: '/cameras' },
   { icon: AlertTriangle, label: 'Events', path: '/events' },
+  { icon: ShieldAlert, label: 'PPE Analytics', path: '/ppe' },
   { icon: BarChart2, label: 'Analytics', path: '/analytics' },
+  { icon: Box, label: 'Carton Analytics', path: '/carton' },
   { icon: Car, label: 'Parking Analytics', path: '/parking' },
   { icon: BadgeCheck, label: 'Attendance', path: '/attendance' },
   { icon: Flame, label: 'Fire Detection', path: '/fire' },
@@ -48,14 +50,14 @@ export function Sidebar() {
     <motion.aside 
       layout
       className={cn(
-        "glass-panel border-r border-white/5 flex flex-col justify-between shrink-0 h-full relative z-40 overflow-visible",
+        "glass-panel border-r border-foreground/5 flex flex-col justify-between shrink-0 h-full relative z-40 overflow-visible",
         sidebarOpen ? "w-64" : "w-20"
       )}
       initial={false}
       animate={{ width: sidebarOpen ? 256 : 80 }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
     >
-      <div className="flex flex-col py-6 gap-2 overflow-y-auto custom-scrollbar flex-1 px-3">
+      <div className="flex flex-col py-4 gap-1 overflow-y-auto custom-scrollbar flex-1 px-3">
         {filteredNavItems.map((item) => {
           const isActive = location.pathname === item.path
           return (
@@ -74,8 +76,8 @@ export function Sidebar() {
               )}
               
               <div className={cn(
-                "flex items-center gap-4 px-3 py-3 rounded-xl transition-all relative z-10",
-                isActive ? "text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                "flex items-center gap-4 px-3 py-2.5 rounded-xl transition-all relative z-10",
+                isActive ? "text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-foreground/5"
               )}>
                 {isActive && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-md glow-primary" />}
                 
@@ -105,7 +107,7 @@ export function Sidebar() {
         })}
       </div>
 
-      <div className="flex flex-col py-4 gap-2 border-t border-white/5 px-3">
+      <div className="flex flex-col py-4 gap-2 border-t border-foreground/5 px-3">
         {filteredBottomNavItems.map((item) => {
           const isActive = location.pathname === item.path
           return (
@@ -114,7 +116,7 @@ export function Sidebar() {
               to={item.path}
               className={cn(
                 "flex items-center gap-4 px-3 py-3 rounded-xl transition-all relative group",
-                isActive ? "text-primary-foreground bg-primary/20 border border-primary/30" : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                isActive ? "text-primary-foreground bg-primary/20 border border-primary/30" : "text-muted-foreground hover:text-foreground hover:bg-foreground/5"
               )}
             >
               <motion.div whileHover={{ rotate: 15 }} whileTap={{ scale: 0.9 }}>
@@ -138,7 +140,7 @@ export function Sidebar() {
         
         <button 
           onClick={toggleSidebar}
-          className="flex items-center gap-4 px-3 py-3 mt-2 rounded-xl text-muted-foreground hover:bg-white/5 hover:text-foreground transition-all group"
+          className="flex items-center gap-4 px-3 py-3 mt-2 rounded-xl text-muted-foreground hover:bg-foreground/5 hover:text-foreground transition-all group"
         >
           <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
             {sidebarOpen ? <ChevronLeft className="w-5 h-5 shrink-0" /> : <ChevronRight className="w-5 h-5 shrink-0" />}

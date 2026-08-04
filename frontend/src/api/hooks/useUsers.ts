@@ -27,9 +27,12 @@ export const useUsers = () => {
     setError(null);
     try {
       const response = await api.get('/users');
+      if (!Array.isArray(response.data)) {
+        throw new Error('Received invalid data format from server (expected array)');
+      }
       setUsers(response.data);
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to fetch users');
+      setError(err.response?.data?.detail || err.message || 'Failed to fetch users');
     } finally {
       setIsLoading(false);
     }
@@ -40,9 +43,12 @@ export const useUsers = () => {
     setError(null);
     try {
       const response = await api.get('/roles');
+      if (!Array.isArray(response.data)) {
+        throw new Error('Received invalid data format from server (expected array)');
+      }
       setRoles(response.data);
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to fetch roles');
+      setError(err.response?.data?.detail || err.message || 'Failed to fetch roles');
     } finally {
       setIsLoading(false);
     }

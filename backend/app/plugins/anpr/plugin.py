@@ -2,6 +2,7 @@ import asyncio
 import copy
 from typing import List, Dict, Any
 from loguru import logger
+from concurrent.futures import ThreadPoolExecutor
 
 from app.engine.base import BaseDetectionPlugin, FrameData, TrackerContext, DetectionEvent
 from app.plugins.anpr.factory import ANPRFactory
@@ -9,7 +10,7 @@ from app.plugins.anpr.tracker import ANPRTracker
 from app.plugins.anpr.validator import PlateValidator
 from app.plugins.anpr.service import anpr_service
 from app.plugins.anpr.config_parser import anpr_app_config
-from app.plugins.anpr.utils import save_snapshot
+from app.plugins.anpr.utils import save_snapshot, enhance_plate_image
 from app.plugins.anpr.events import ANPREventType
 
 class ANPRPlugin(BaseDetectionPlugin):
@@ -23,6 +24,7 @@ class ANPRPlugin(BaseDetectionPlugin):
         self.plate_detector = ANPRFactory.get_plate_detector()
         self.ocr_engine = ANPRFactory.get_ocr_engine()
         self.tracker = ANPRTracker(track_timeout=anpr_app_config.fusion.track_timeout_seconds)
+        self.executor = ThreadPoolExecutor(max_workers=4)
         logger.info("Initialized ANPRPlugin via ANPRFactory.")
         
         # Start the background service for DB logging if there's a loop
@@ -46,6 +48,26 @@ class ANPRPlugin(BaseDetectionPlugin):
         timestamp = frame_data.timestamp
         frame = frame_data.frame
         
+        h, w = frame.shape[:2]
+        detection_line_y = int(h * 0.45) # detection boundary at 45% of screen height (higher up)
+        
+        # Always emit a drawing event for the ROI line
+        events.append(DetectionEvent(
+            plugin_name=self.plugin_name,
+            event_type="ANPR_STATS",
+            camera_id=camera_id,
+            timestamp=timestamp,
+            confidence=1.0,
+            metadata={
+                "drawings": [{
+                    "type": "line",
+                    "coords": [[0, detection_line_y], [w, detection_line_y]],
+                    "color": [0, 255, 0],
+                    "thickness": 3
+                }]
+            }
+        ))
+        
         # 1. Iterate over vehicle detections provided by the core pipeline
         if not hasattr(frame_data.detections, 'boxes') or getattr(frame_data.detections.boxes, 'id', None) is None:
             # Cleanup Stale Tracks and Emit Final Events even if no detections this frame
@@ -63,8 +85,12 @@ class ANPRPlugin(BaseDetectionPlugin):
             
             # Crop vehicle
             vx1, vy1, vx2, vy2 = map(int, vehicle_box)
+            
+            # ONLY PROCESS VEHICLES THAT HAVE CROSSED THE DETECTION LINE
+            if vy2 < detection_line_y:
+                continue
+                
             # Boundary checks
-            h, w = frame.shape[:2]
             vx1, vy1 = max(0, vx1), max(0, vy1)
             vx2, vy2 = min(w, vx2), min(h, vy2)
             
@@ -89,13 +115,28 @@ class ANPRPlugin(BaseDetectionPlugin):
             vehicle_track = self.tracker.get_or_create_track(track_id, timestamp, vehicle_type=v_type_str)
             vehicle_track.update(timestamp)
             
-            if not vehicle_track.best_vehicle_snapshot:
+            if vehicle_track.best_vehicle_snapshot is None:
                 # Store the raw numpy array, the background service will handle saving it
                 vehicle_track.best_vehicle_snapshot = vehicle_crop.copy()
+                
+            # Capture a live base64 snapshot for the frontend if the vehicle is very close
+            is_close = (vy2 - vy1) > (h * 0.3) or (vx2 - vx1) > (w * 0.3)
+            if is_close and not hasattr(vehicle_track, 'b64_snapshot'):
+                import cv2, base64
+                ret, buffer = cv2.imencode('.jpg', vehicle_crop, [int(cv2.IMWRITE_JPEG_QUALITY), 50])
+                if ret:
+                    vehicle_track.b64_snapshot = f"data:image/jpeg;base64,{base64.b64encode(buffer).decode('utf-8')}"
             
             for plate_crop, p_conf, p_bbox in plates:
+                # 2.5 Image Enhancement (CLAHE + Sharpening)
+                enhanced_crop = enhance_plate_image(
+                    plate_crop, 
+                    clahe_clip=anpr_app_config.enhancement.clahe_clip_limit,
+                    denoise_h=anpr_app_config.enhancement.denoise_h
+                )
+                
                 # 3. OCR Extraction
-                ocr_results = self.ocr_engine.recognize(plate_crop)
+                ocr_results = self.ocr_engine.recognize(enhanced_crop)
                 
                 for res in ocr_results:
                     raw_text = res["text"]
@@ -109,7 +150,7 @@ class ANPRPlugin(BaseDetectionPlugin):
                     
                     if is_valid and repaired_text:
                         # 5. Temporal Fusion
-                        vehicle_track.fusion.add_observation(repaired_text, ocr_conf, timestamp)
+                        vehicle_track.fusion.add_observation(repaired_text, float(ocr_conf), timestamp)
                         
                         # Save the best plate snapshot dynamically based on highest OCR conf seen
                         if not hasattr(vehicle_track, 'max_ocr_seen') or ocr_conf > vehicle_track.max_ocr_seen:
@@ -124,10 +165,11 @@ class ANPRPlugin(BaseDetectionPlugin):
                     event_type="LIVE_TRACKING",
                     camera_id=camera_id,
                     timestamp=timestamp,
-                    confidence=best_conf,
+                    confidence=float(best_conf),
                     metadata={
                         "plate_number": best_plate,
                         "vehicle_type": getattr(vehicle_track, 'vehicle_type', 'Vehicle'),
+                        "vehicle_snapshot": getattr(vehicle_track, 'b64_snapshot', None),
                         "drawings": [
                             {
                                 "type": "rect",
@@ -160,6 +202,14 @@ class ANPRPlugin(BaseDetectionPlugin):
             best_plate, best_conf = track.fusion.get_best_plate()
             
             if best_plate:
+                # Save snapshots synchronously to avoid numpy JSON serialization errors
+                veh_path = None
+                plate_path = None
+                if track.best_vehicle_snapshot is not None:
+                    veh_path = save_snapshot(track.best_vehicle_snapshot, prefix="veh")
+                if track.best_plate_snapshot is not None:
+                    plate_path = save_snapshot(track.best_plate_snapshot, prefix="plate")
+                
                 # Dispatch async DB log task
                 track_info = {
                     "track_id": str(track.track_id),
@@ -167,14 +217,13 @@ class ANPRPlugin(BaseDetectionPlugin):
                     "start_time": track.start_time,
                     "end_time": track.last_seen,
                     "best_plate": best_plate,
-                    "plate_confidence": best_conf,
+                    "plate_confidence": float(best_conf),
                     "vehicle_type": track.vehicle_type,
-                    "vehicle_snapshot": track.best_vehicle_snapshot,
-                    "plate_snapshot": track.best_plate_snapshot
+                    "vehicle_snapshot": veh_path,
+                    "plate_snapshot": plate_path
                 }
                 
-                import threading
-                threading.Thread(target=anpr_service._handle_track, args=({"track_info": track_info},), daemon=True).start()
+                self.executor.submit(anpr_service._handle_track, {"track_info": track_info})
                 
                 # Emit WebSocket Event for real-time frontend
                 event = DetectionEvent(
@@ -182,13 +231,13 @@ class ANPRPlugin(BaseDetectionPlugin):
                     event_type=ANPREventType.NEW_PLATE.value,
                     camera_id=camera_id,
                     timestamp=track.last_seen,
-                    confidence=best_conf,
+                    confidence=float(best_conf),
                     metadata={
                         "plate_number": best_plate,
                         "track_id": track.track_id,
                         "vehicle_type": track.vehicle_type,
-                        "vehicle_snapshot": track.best_vehicle_snapshot,
-                        "plate_snapshot": track.best_plate_snapshot,
+                        "vehicle_snapshot": veh_path,
+                        "plate_snapshot": plate_path,
                         "drawings": []
                     }
                 )

@@ -55,7 +55,7 @@ export function ToastContainer() {
                 <p className="text-sm opacity-90 leading-tight">{toast.message}</p>
                 
                 {toast.cameraName && (
-                  <div className="flex items-center gap-1.5 mt-1.5 text-xs font-medium text-muted-foreground bg-black/20 self-start px-2 py-0.5 rounded-md">
+                  <div className="flex items-center gap-1.5 mt-1.5 text-xs font-medium text-muted-foreground bg-background/20 self-start px-2 py-0.5 rounded-md">
                     <Camera className="w-3 h-3" />
                     <span className="truncate">{toast.cameraName}</span>
                   </div>
@@ -64,7 +64,7 @@ export function ToastContainer() {
 
               <button
                 onClick={() => removeToast(toast.id)}
-                className="shrink-0 opacity-50 hover:opacity-100 transition-opacity p-1 -mr-2 -mt-2 self-start rounded-md hover:bg-black/10"
+                className="shrink-0 opacity-50 hover:opacity-100 transition-opacity p-1 -mr-2 -mt-2 self-start rounded-md hover:bg-background/10"
               >
                 <X className="w-4 h-4 text-foreground" />
               </button>

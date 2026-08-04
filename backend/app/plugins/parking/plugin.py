@@ -1,6 +1,7 @@
 from typing import List, Dict, Any
 from loguru import logger
 from shapely.geometry import Point, Polygon
+import time
 
 from app.engine.base import BaseDetectionPlugin, FrameData, TrackerContext, DetectionEvent
 from config.config import config
@@ -13,6 +14,8 @@ class ParkingAnalyticsPlugin(BaseDetectionPlugin):
         super().__init__(app_config)
         # COCO Classes for vehicles: 2=car, 3=motorcycle, 5=bus, 7=truck
         self.vehicle_classes = {2, 3, 5, 7}
+        self.previous_occupancy = {}
+        self.last_alert_time = {}
         logger.info("Initialized ParkingAnalyticsPlugin")
 
     @property
@@ -24,12 +27,17 @@ class ParkingAnalyticsPlugin(BaseDetectionPlugin):
 
     def process_frame(self, frame_data: FrameData, tracker_context: TrackerContext) -> List[DetectionEvent]:
         camera_id = frame_data.camera_id
+        camera_url = getattr(frame_data, 'camera_url', camera_id)
         timestamp = frame_data.timestamp
         events = []
         
-        spots = config.get_parking_spots_for_camera(camera_id)
+        spots = config.get_parking_spots_for_camera(camera_url)
         if not spots:
-            return events
+            # Fallback to 2 default green boxes if none are configured
+            spots = [
+                [[200, 300], [500, 300], [450, 600], [150, 600]], # Bay 1
+                [[550, 300], [850, 300], [800, 600], [500, 600]]  # Bay 2
+            ]
             
         spot_polys = [Polygon(spot) for spot in spots]
         
@@ -66,8 +74,41 @@ class ParkingAnalyticsPlugin(BaseDetectionPlugin):
                 "type": "poly",
                 "coords": spot,
                 "color": color,
+                "thickness": 3,
+                "opacity": 0.35
+            })
+            drawings.append({
+                "type": "text",
+                "text": f"Bay {idx + 1}",
+                "coords": [spot[0][0], spot[0][1] - 10],
+                "color": color,
+                "scale": 0.6,
                 "thickness": 2
             })
+            
+        # Detect state transitions for alerts
+        if camera_id not in self.previous_occupancy:
+            self.previous_occupancy[camera_id] = [False] * len(spots)
+            self.last_alert_time[camera_id] = [0.0] * len(spots)
+            
+        now = time.time()
+        for idx, (is_occupied, was_occupied) in enumerate(zip(occupied_spots, self.previous_occupancy[camera_id])):
+            if is_occupied and not was_occupied:
+                if now - self.last_alert_time[camera_id][idx] > 5.0: # 5 second cooldown
+                    events.append(DetectionEvent(
+                        plugin_name=self.plugin_name,
+                        event_type="PARKING_ALERT",
+                        camera_id=camera_id,
+                        timestamp=timestamp,
+                        confidence=1.0,
+                        metadata={
+                            "severity": "warning",
+                            "description": f"Car entered Parking Bay {idx + 1}!"
+                        }
+                    ))
+                    self.last_alert_time[camera_id][idx] = now
+                    
+        self.previous_occupancy[camera_id] = occupied_spots
             
         event = DetectionEvent(
             plugin_name=self.plugin_name,

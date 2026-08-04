@@ -88,7 +88,7 @@ export function ZoneDrawer({ streamUrl, points, onChange, title, nativeWidth = 1
       <div className="flex items-center justify-between">
         <h3 className="font-bold text-white">{title}</h3>
         <div className="flex gap-2">
-          <button onClick={handleUndo} disabled={localPoints.length === 0} className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded text-xs flex items-center gap-1 transition-colors disabled:opacity-50">
+          <button onClick={handleUndo} disabled={localPoints.length === 0} className="px-3 py-1.5 bg-foreground/10 hover:bg-foreground/20 text-white rounded text-xs flex items-center gap-1 transition-colors disabled:opacity-50">
             <RotateCcw className="w-3 h-3" /> Undo
           </button>
           <button onClick={handleClear} disabled={localPoints.length === 0} className="px-3 py-1.5 bg-danger/20 hover:bg-danger/30 text-danger rounded text-xs flex items-center gap-1 transition-colors disabled:opacity-50">
@@ -101,7 +101,7 @@ export function ZoneDrawer({ streamUrl, points, onChange, title, nativeWidth = 1
       </div>
       
       <div 
-        className="relative rounded-lg overflow-hidden border-2 border-white/10 bg-black/50 aspect-video group"
+        className="relative rounded-lg overflow-hidden border-2 border-foreground/10 bg-background/50 aspect-video group"
         ref={containerRef}
       >
         <img 

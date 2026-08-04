@@ -9,7 +9,6 @@ class PeopleCountingPlugin(BaseDetectionPlugin):
     """
     def __init__(self, app_config=None):
         super().__init__(app_config)
-        self.unique_ids = set()
         logger.info("Initialized PeopleCountingPlugin")
 
     @property
@@ -24,18 +23,89 @@ class PeopleCountingPlugin(BaseDetectionPlugin):
         timestamp = frame_data.timestamp
         events = []
         
-        current_count = 0
+        state = tracker_context.get_state(self.plugin_name, camera_id)
+        if "unique_ids" not in state:
+            state["unique_ids"] = set()
+            state["track_history"] = {}
+        unique_ids = state["unique_ids"]
+        track_history = state["track_history"]
         
-        if frame_data.detections is not None and getattr(frame_data.detections, 'boxes', None) is not None and getattr(frame_data.detections.boxes, 'id', None) is not None:
+        current_count = 0
+        from config.config import config
+        line_y = getattr(config, 'LINE_CROSSING_Y', 600)
+        line_x_start = getattr(config, 'LINE_CROSSING_X_START', 750)
+        line_x_end = getattr(config, 'LINE_CROSSING_X_END', 1150)
+        direction = getattr(config, 'LINE_CROSSING_DIRECTION', 'down')
+        
+        if frame_data.detections is not None and getattr(frame_data.detections, 'boxes', None) is not None:
+            # Detections exist. We can safely count people.
             cls_ids = frame_data.detections.boxes.cls.cpu().numpy()
-            track_ids = frame_data.detections.boxes.id.cpu().numpy()
+            xyxys = frame_data.detections.boxes.xyxy.cpu().numpy()
             
-            for cls_id, track_id in zip(cls_ids, track_ids):
+            # Tracking IDs might be None if the tracker was bypassed or if no tracks are active
+            has_tracks = getattr(frame_data.detections.boxes, 'id', None) is not None
+            track_ids = frame_data.detections.boxes.id.cpu().numpy() if has_tracks else [None] * len(cls_ids)
+            
+            for cls_id, track_id, xyxy in zip(cls_ids, track_ids, xyxys):
                 if int(cls_id) == 0:
                     current_count += 1
-                    self.unique_ids.add(int(track_id))
                     
-        event = DetectionEvent(
+                    # Only do line crossing and unique ID logic if we have a valid track_id
+                    if track_id is not None:
+                        tid = int(track_id)
+                        unique_ids.add(tid)
+                        
+                        # Calculate center Y
+                        x1, y1, x2, y2 = xyxy
+                        cy = (y1 + y2) / 2
+                        
+                        if tid not in track_history:
+                            track_history[tid] = []
+                        track_history[tid].append(cy)
+                        
+                        # Keep history small
+                        if len(track_history[tid]) > 10:
+                            track_history[tid].pop(0)
+                            
+                        # Check line crossing
+                        if len(track_history[tid]) >= 2:
+                            prev_y = track_history[tid][-2]
+                            curr_y = track_history[tid][-1]
+                            
+                            # Only trigger if the person's center X is within the door boundaries
+                            cx = (x1 + x2) / 2
+                            is_within_x_bounds = line_x_start <= cx <= line_x_end
+                            
+                            crossed_down = prev_y < line_y and curr_y >= line_y
+                            crossed_up = prev_y > line_y and curr_y <= line_y
+                            
+                            crossed = False
+                            if is_within_x_bounds:
+                                if direction == "down" and crossed_down:
+                                    crossed = True
+                                elif direction == "up" and crossed_up:
+                                    crossed = True
+                                elif direction == "both" and (crossed_down or crossed_up):
+                                    crossed = True
+                                
+                            if crossed:
+                                track_history[tid] = [curr_y]
+                                
+                                events.append(DetectionEvent(
+                                    plugin_name=self.plugin_name,
+                                    event_type="LINE_CROSSED",
+                                    camera_id=camera_id,
+                                    timestamp=timestamp,
+                                    confidence=1.0,
+                                    metadata={
+                                        "track_id": tid,
+                                        "line_y": line_y,
+                                        "direction_crossed": "down" if crossed_down else "up"
+                                    }
+                                ))
+                            
+        # Always emit a PERSON_COUNT event for live stats and draw the line
+        events.append(DetectionEvent(
             plugin_name=self.plugin_name,
             event_type="PERSON_COUNT",
             camera_id=camera_id,
@@ -43,9 +113,24 @@ class PeopleCountingPlugin(BaseDetectionPlugin):
             confidence=1.0,
             metadata={
                 "current_people_in_frame": current_count,
-                "total_unique_people_seen": len(self.unique_ids)
+                "total_unique_people_seen": len(unique_ids),
+                "drawings": [
+                    {
+                        "type": "line",
+                        "coords": [[line_x_start, line_y], [line_x_end, line_y]],
+                        "color": [0, 255, 255], # Yellow line
+                        "thickness": 3
+                    },
+                    {
+                        "type": "text",
+                        "text": "Door / Black Tile",
+                        "coords": [line_x_start, line_y - 10],
+                        "color": [0, 255, 255],
+                        "scale": 0.6,
+                        "thickness": 2
+                    }
+                ]
             }
-        )
-        events.append(event)
+        ))
                     
         return events

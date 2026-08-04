@@ -10,7 +10,7 @@ class IInferenceEngine(ABC):
     """
     
     @abstractmethod
-    def detect(self, frame: np.ndarray) -> Any:
+    def detect(self, frame: np.ndarray, conf: float = None, classes: list = None) -> Any:
         """
         Performs object detection on the provided frame.
         

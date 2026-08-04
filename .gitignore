@@ -1,0 +1,73 @@
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Videos and large media
+*.mp4
+*.MOV
+*.avi
+*.mkv
+
+# Databases
+*.sqlite3
+*.db
+backend/logiceye.db
+
+# Logs
+*.log
+backend.log
+backend_debug*.log
+
+# Machine Learning models
+*.onnx
+*.mlpackage
+backend/detection/yolo11n.onnx
+backend/detection/yolo11n.mlpackage/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Frontend
+node_modules/
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+frontend/.playwright/
+frontend/dist/
+frontend/build/
+
+# Snapshots
+snapshots/
+*.jpg
+
+# Test and scratch scripts
+backend/tests/scratch_*
+test_*.py
+scratch_*.py
+backend/test_*.py
+save_frames*.py
+extract_frame.py
+clean_db.py
+backend/add_missing_cameras*.py
+backend/get_cams.py
+backend/get_config.py
+
+# Others
+backend/camera_plugins_state.json

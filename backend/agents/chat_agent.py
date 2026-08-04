@@ -1,10 +1,6 @@
 import os
 from dotenv import load_dotenv
 from typing import TypedDict, Annotated, List, Dict, Any, Union
-from langgraph.graph.message import add_messages
-from langchain_groq import ChatGroq
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, ToolMessage
-from langgraph.graph import StateGraph, END
 from sqlalchemy import text
 from loguru import logger
 import json
@@ -17,11 +13,6 @@ from database.session import SessionLocal
 from config.config import AppConfig
 
 settings = AppConfig()
-
-# 1. Define State
-class AgentState(TypedDict):
-    messages: Annotated[list, add_messages]
-    camera_id: str
 
 # 2. Define Tools
 def query_database(query: str, parameters: Dict[str, Any] = None) -> str:
@@ -97,6 +88,15 @@ def check_live_camera_status(camera_id: Union[str, int] = "all") -> str:
 # 3. Setup LangGraph Workflow
 class LogicEyeAgent:
     def __init__(self):
+        from langchain_groq import ChatGroq
+        from langgraph.graph.message import add_messages
+        from typing import TypedDict, Annotated
+        
+        class AgentState(TypedDict):
+            messages: Annotated[list, add_messages]
+            camera_id: str
+        self.AgentState = AgentState
+        
         # We use the user's provided model and API key from configuration
         groq_api_key = settings.GROQ_API_KEY
         groq_model = settings.GROQ_MODEL
@@ -116,7 +116,8 @@ class LogicEyeAgent:
         self.graph = self._build_graph()
 
     def _build_graph(self):
-        workflow = StateGraph(AgentState)
+        from langgraph.graph import StateGraph, END
+        workflow = StateGraph(self.AgentState)
         
         # Define nodes
         workflow.add_node("agent", self.call_agent)
@@ -136,14 +137,15 @@ class LogicEyeAgent:
         
         return workflow.compile()
         
-    def should_continue(self, state: AgentState) -> str:
+    def should_continue(self, state: dict) -> str:
         messages = state["messages"]
         last_message = messages[-1]
-        if last_message.tool_calls:
+        if getattr(last_message, "tool_calls", None):
             return "continue"
         return "end"
 
-    def call_agent(self, state: AgentState):
+    def call_agent(self, state: dict):
+        from langchain_core.messages import SystemMessage
         if not self.llm:
             return {"messages": [SystemMessage(content="AI Agent is disabled. Please configure GROQ_API_KEY.")]}
             
@@ -162,12 +164,13 @@ class LogicEyeAgent:
         response = self.llm_with_tools.invoke(messages)
         return {"messages": [response]}
 
-    def execute_tools(self, state: AgentState):
+    def execute_tools(self, state: dict):
+        from langchain_core.messages import ToolMessage
         messages = state["messages"]
         last_message = messages[-1]
         
         tool_responses = []
-        for tool_call in last_message.tool_calls:
+        for tool_call in getattr(last_message, "tool_calls", []):
             if tool_call["name"] == "query_database":
                 # Execute the tool
                 query = tool_call["args"].get("query", "")
@@ -191,6 +194,7 @@ class LogicEyeAgent:
         return output
 
     def chat(self, user_input: str, camera_id: str = "") -> str:
+        from langchain_core.messages import HumanMessage
         """Entry point for the FastAPI endpoint"""
         if not self.llm:
             return "I am currently offline. Please ask the administrator to configure the Groq API key."
@@ -225,5 +229,18 @@ class LogicEyeAgent:
                 
             return "The AI service is temporarily unavailable. Please try again later."
 
-# Singleton instance
-agent = LogicEyeAgent()
+class LogicEyeAgentProxy:
+    def __init__(self):
+        self._agent = None
+        
+    @property
+    def agent(self):
+        if self._agent is None:
+            self._agent = LogicEyeAgent()
+        return self._agent
+        
+    def chat(self, user_input: str, camera_id: str = "") -> str:
+        return self.agent.chat(user_input, camera_id)
+
+# Singleton instance proxy
+agent = LogicEyeAgentProxy()

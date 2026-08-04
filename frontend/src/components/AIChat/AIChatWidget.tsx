@@ -215,9 +215,9 @@ const AIChatWidget: React.FC = () => {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 50, scale: 0.95 }}
             transition={{ type: "spring", stiffness: 300, damping: 25 }}
-            className="glass-pro rounded-3xl shadow-[0_0_50px_rgba(0,112,243,0.15)] w-80 sm:w-96 flex flex-col overflow-hidden h-[600px] mb-4 border border-white/10"
+            className="glass-pro rounded-3xl shadow-[0_0_50px_rgba(0,112,243,0.15)] w-80 sm:w-96 flex flex-col overflow-hidden h-[600px] mb-4 border border-foreground/10"
           >
-            <div className="p-5 border-b border-white/10 bg-black/40 flex justify-between items-center relative overflow-hidden">
+            <div className="p-5 border-b border-foreground/10 bg-background/40 flex justify-between items-center relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-primary/20 rounded-full blur-[40px] -mr-10 -mt-10 pointer-events-none" />
               <div className="flex items-center gap-3 relative z-10">
                 <div className="w-10 h-10 rounded-xl bg-primary/20 border border-primary/50 flex items-center justify-center shadow-[0_0_15px_rgba(0,112,243,0.3)]">
@@ -231,10 +231,10 @@ const AIChatWidget: React.FC = () => {
                 </div>
               </div>
               <div className="flex items-center gap-2 relative z-10">
-                <button onClick={() => setSpeakerEnabled(!speakerEnabled)} className="p-2 bg-white/5 hover:bg-white/10 rounded-lg transition-colors border border-white/10 text-muted-foreground hover:text-white" title="Toggle Voice Response">
+                <button onClick={() => setSpeakerEnabled(!speakerEnabled)} className="p-2 bg-foreground/5 hover:bg-foreground/10 rounded-lg transition-colors border border-foreground/10 text-muted-foreground hover:text-white" title="Toggle Voice Response">
                   {speakerEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
                 </button>
-                <button onClick={() => setIsOpen(false)} className="p-2 bg-white/5 hover:bg-danger/20 hover:text-danger hover:border-danger/30 rounded-lg transition-colors border border-white/10 text-muted-foreground">
+                <button onClick={() => setIsOpen(false)} className="p-2 bg-foreground/5 hover:bg-danger/20 hover:text-danger hover:border-danger/30 rounded-lg transition-colors border border-foreground/10 text-muted-foreground">
                   <X size={16} />
                 </button>
               </div>
@@ -259,7 +259,7 @@ const AIChatWidget: React.FC = () => {
                   <div className={cn(
                     "max-w-[80%] rounded-2xl p-3 text-sm shadow-md",
                     msg.isBot 
-                      ? (msg.isError ? 'bg-danger/10 text-danger border border-danger/30 rounded-bl-sm' : 'glass-panel border-white/10 text-white/90 rounded-bl-sm')
+                      ? (msg.isError ? 'bg-danger/10 text-danger border border-danger/30 rounded-bl-sm' : 'glass-panel border-foreground/10 text-foreground/90 rounded-bl-sm')
                       : 'bg-primary text-white rounded-br-sm glow-primary',
                     msg.isPartial ? 'opacity-70 italic' : ''
                   )}>
@@ -273,7 +273,7 @@ const AIChatWidget: React.FC = () => {
                   <div className="w-6 h-6 rounded-full bg-primary/20 border border-primary/50 flex items-center justify-center shrink-0 mr-2 mt-auto mb-1">
                     <Fingerprint className="w-3 h-3 text-primary animate-pulse" />
                   </div>
-                  <div className="glass-panel border-white/10 text-white rounded-2xl rounded-bl-sm p-4 text-sm flex gap-1.5 items-center">
+                  <div className="glass-panel border-foreground/10 text-white rounded-2xl rounded-bl-sm p-4 text-sm flex gap-1.5 items-center">
                     <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce"></span>
                     <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce delay-75"></span>
                     <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce delay-150"></span>
@@ -284,12 +284,12 @@ const AIChatWidget: React.FC = () => {
             </div>
 
           {voiceState !== "IDLE" && (
-            <div className="bg-black/60 border-t border-white/5 px-4 py-2 flex items-center gap-3 justify-center text-[10px] font-bold tracking-widest uppercase text-primary glow-primary">
+            <div className="bg-background/60 border-t border-foreground/5 px-4 py-2 flex items-center gap-3 justify-center text-[10px] font-bold tracking-widest uppercase text-primary glow-primary">
                {getStatusBadge()}
             </div>
           )}
 
-          <div className="p-4 bg-black/40 border-t border-white/10 backdrop-blur-md">
+          <div className="p-4 bg-background/40 border-t border-foreground/10 backdrop-blur-md">
             <div className="relative flex items-center gap-3">
               <button 
                 onClick={toggleListening}
@@ -297,7 +297,7 @@ const AIChatWidget: React.FC = () => {
                   "p-3 rounded-xl transition-all duration-300 shadow-lg flex shrink-0 items-center justify-center",
                   voiceState === "LISTENING" || voiceState === "TRANSCRIBING"
                   ? 'bg-danger/20 text-danger border border-danger/50 glow-danger animate-pulse' 
-                  : 'bg-white/5 text-muted-foreground border border-white/10 hover:bg-white/10 hover:text-white'
+                  : 'bg-foreground/5 text-muted-foreground border border-foreground/10 hover:bg-foreground/10 hover:text-white'
                 )}
                 title={voiceState === "LISTENING" ? "Stop Listening" : "Start Voice Mode"}
               >
@@ -312,12 +312,12 @@ const AIChatWidget: React.FC = () => {
                   onKeyDown={handleKeyPress}
                   placeholder="Query LogicEye Core..."
                   disabled={voiceState !== "IDLE" && voiceState !== "ERROR"}
-                  className="w-full bg-black/50 text-white border border-white/10 rounded-xl pl-4 pr-12 py-3 text-sm focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 disabled:opacity-50 transition-all placeholder-white/30"
+                  className="w-full bg-background/50 text-white border border-foreground/10 rounded-xl pl-4 pr-12 py-3 text-sm focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 disabled:opacity-50 transition-all placeholder-white/30"
                 />
                 <button 
                   onClick={() => handleSend()}
                   disabled={!input.trim() || isLoading || (voiceState !== "IDLE" && voiceState !== "ERROR")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 bg-primary text-white p-1.5 rounded-lg hover:bg-primary/80 disabled:bg-white/5 disabled:text-white/20 transition-all"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 bg-primary text-white p-1.5 rounded-lg hover:bg-primary/80 disabled:bg-foreground/5 disabled:text-foreground/20 transition-all"
                 >
                   <Send size={16} />
                 </button>

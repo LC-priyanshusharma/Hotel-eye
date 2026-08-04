@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 from typing import Any, List
 
 from database.session import get_async_db
-from models.auth import User, Role, Permission
+from database.models.auth import User, Role, Permission
 from app.auth.schemas import UserResponse, UserCreate, RoleResponse, UserRoleUpdate
 from app.auth.security import get_password_hash
 from app.auth.dependencies import require_permissions

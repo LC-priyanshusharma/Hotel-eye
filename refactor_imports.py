@@ -15,12 +15,10 @@ python_replacements = {
     r"import core\.stream_reader": "import camera.stream_reader",
     r"from core\.persistence": "from database.persistence",
     r"import core\.persistence": "import database.persistence",
-    r"from db\.models": "from models.models",
-    r"import db\.models": "import models.models",
-    r"from db\.session": "from database.session",
-    r"import db\.session": "import database.session",
-    r"from modules\.gesture": "from tracking.gesture",
-    r"import modules\.gesture": "import tracking.gesture",
+    r"from models\.": "from database.models.",
+    r"import models\.": "import database.models.",
+    r"from repositories\.": "from database.repositories.",
+    r"import repositories\.": "import database.repositories.",
     r'default="yolo11n.pt"': 'default="detection/yolo11n.pt"',
 }
 

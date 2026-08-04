@@ -2,30 +2,30 @@
 @plugin "tailwindcss-animate";
 
 @theme {
-  --color-background: #050505;
-  --color-foreground: #F8F9FA;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
   
-  --color-sidebar: #0A0A0A;
-  --color-card: #0F0F11;
-  --color-card-foreground: #F8F9FA;
+  --color-sidebar: var(--sidebar);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
   
-  --color-border: #1E1E24;
-  --color-input: #1E1E24;
+  --color-border: var(--border);
+  --color-input: var(--input);
   
-  --color-primary: #0070F3; /* Vercel / Linear Blue */
-  --color-primary-foreground: #FFFFFF;
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
   
-  --color-secondary: #1F2937;
-  --color-secondary-foreground: #F9FAFB;
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
   
-  --color-muted: #171717;
-  --color-muted-foreground: #A1A1AA;
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
   
-  --color-success: #10B981;
-  --color-danger: #EF4444;
-  --color-warning: #F59E0B;
-  --color-accent: #8B5CF6; /* Purple accent */
-  --color-accent-foreground: #FFFFFF;
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
   
   --radius-xl: 24px;
   --radius-lg: 16px;
@@ -36,9 +36,44 @@
 }
 
 @layer base {
+  /* Default: LIGHT MODE */
   :root {
+    --background: #FFFFFF;
+    --foreground: #09090B;
+    --sidebar: #F8F9FA;
+    --card: #FFFFFF;
+    --card-foreground: #09090B;
+    --popover: #FFFFFF;
+    --popover-foreground: #09090B;
+    --primary: #0070F3;
+    --primary-foreground: #FFFFFF;
+    --secondary: #F4F4F5;
+    --secondary-foreground: #18181B;
+    --muted: #F4F4F5;
+    --muted-foreground: #71717A;
+    --accent: #8B5CF6;
+    --accent-foreground: #FFFFFF;
+    --success: #10B981;
+    --danger: #EF4444;
+    --warning: #F59E0B;
+    --border: #E4E4E7;
+    --input: #E4E4E7;
+    --ring: #0070F3;
+    
+    --glass-bg: rgba(255, 255, 255, 0.7);
+    --glass-pro-bg: rgba(255, 255, 255, 0.6);
+    --glass-border: rgba(0, 0, 0, 0.05);
+    --glass-shadow: rgba(0, 0, 0, 0.05);
+    --glass-pro-shadow: rgba(0, 0, 0, 0.1);
+    --body-grad-1: rgba(0, 112, 243, 0.05);
+    --body-grad-2: rgba(139, 92, 246, 0.05);
+  }
+
+  /* DARK MODE */
+  .dark {
     --background: #050505;
     --foreground: #F8F9FA;
+    --sidebar: #0A0A0A;
     --card: #0F0F11;
     --card-foreground: #F8F9FA;
     --popover: #0F0F11;
@@ -51,12 +86,53 @@
     --muted-foreground: #A1A1AA;
     --accent: #8B5CF6;
     --accent-foreground: #FFFFFF;
-    --destructive: #EF4444;
-    --destructive-foreground: #FFFFFF;
+    --success: #10B981;
+    --danger: #EF4444;
+    --warning: #F59E0B;
     --border: #1E1E24;
     --input: #1E1E24;
     --ring: #0070F3;
-    --radius: 16px;
+    
+    --glass-bg: rgba(10, 10, 10, 0.7);
+    --glass-pro-bg: rgba(5, 5, 5, 0.6);
+    --glass-border: rgba(255, 255, 255, 0.05);
+    --glass-shadow: rgba(0, 0, 0, 0.36);
+    --glass-pro-shadow: rgba(0, 0, 0, 0.5);
+    --body-grad-1: rgba(0, 112, 243, 0.08);
+    --body-grad-2: rgba(139, 92, 246, 0.08);
+  }
+
+  /* COLORFUL MODE (Windows 11 Bloom Style) */
+  .theme-colorful {
+    --background: #EBF4FA;
+    --foreground: #0B2545;
+    --sidebar: #EBF4FA;
+    --card: rgba(255, 255, 255, 0.85);
+    --card-foreground: #0B2545;
+    --popover: rgba(255, 255, 255, 0.85);
+    --popover-foreground: #0B2545;
+    --primary: #00A6FB;
+    --primary-foreground: #FFFFFF;
+    --secondary: rgba(255, 255, 255, 0.5);
+    --secondary-foreground: #18181B;
+    --muted: rgba(255, 255, 255, 0.4);
+    --muted-foreground: #475569;
+    --accent: #E114A5;
+    --accent-foreground: #FFFFFF;
+    --success: #10B981;
+    --danger: #F43F5E;
+    --warning: #F59E0B;
+    --border: rgba(255, 255, 255, 0.5);
+    --input: rgba(255, 255, 255, 0.5);
+    --ring: #00A6FB;
+    
+    --glass-bg: rgba(255, 255, 255, 0.4);
+    --glass-pro-bg: rgba(255, 255, 255, 0.25);
+    --glass-border: rgba(255, 255, 255, 0.6);
+    --glass-shadow: rgba(0, 166, 251, 0.15);
+    --glass-pro-shadow: rgba(225, 20, 165, 0.15);
+    --body-grad-1: rgba(0, 166, 251, 0.4);
+    --body-grad-2: rgba(225, 20, 165, 0.3);
   }
 }
 
@@ -67,8 +143,8 @@
   body {
     @apply bg-background text-foreground font-sans antialiased selection:bg-primary/30 selection:text-primary-foreground;
     background-image: 
-      radial-gradient(circle at 15% 50%, rgba(0, 112, 243, 0.08), transparent 25%),
-      radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.08), transparent 25%);
+      radial-gradient(circle at 15% 50%, var(--body-grad-1), transparent 35%),
+      radial-gradient(circle at 85% 30%, var(--body-grad-2), transparent 35%);
     background-attachment: fixed;
   }
   
@@ -79,18 +155,26 @@
   */
   
   .glass {
-    @apply bg-[#0A0A0A]/70 backdrop-blur-xl border border-white/[0.05] shadow-[0_8px_32px_0_rgba(0,0,0,0.36)];
+    background-color: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 8px 32px 0 var(--glass-shadow);
+    @apply backdrop-blur-xl;
   }
   
   .glass-pro {
-    @apply bg-[#050505]/60 backdrop-blur-2xl border border-white/[0.08] shadow-[0_8px_32px_0_rgba(0,0,0,0.5)];
+    background-color: var(--glass-pro-bg);
+    border: 1px solid var(--glass-border);
     box-shadow: 
-      0 0 0 1px rgba(255,255,255,0.05) inset,
-      0 20px 40px rgba(0,0,0,0.5);
+      0 0 0 1px var(--glass-border) inset,
+      0 20px 40px var(--glass-pro-shadow);
+    @apply backdrop-blur-2xl;
   }
 
   .glass-panel {
-    @apply bg-[#0A0A0A]/40 backdrop-blur-3xl border border-white/[0.02] shadow-[0_8px_32px_0_rgba(0,0,0,0.3)];
+    background-color: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 8px 32px 0 var(--glass-shadow);
+    @apply backdrop-blur-3xl;
   }
   
   /* Neon Glow Utilities for accents and critical paths */
@@ -117,7 +201,7 @@
    ======================================================================
   */
   .hover-lift {
-    @apply transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-xl hover:shadow-primary/10 hover:border-white/10;
+    @apply transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-xl hover:shadow-primary/10 hover:border-foreground/10;
   }
 
   .animated-border {
@@ -156,7 +240,7 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    @apply bg-border rounded-full transition-colors;
+    @apply bg-muted-foreground/30 rounded-full transition-colors;
   }
   ::-webkit-scrollbar-thumb:hover {
     @apply bg-muted-foreground/50;

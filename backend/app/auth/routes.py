@@ -1,17 +1,20 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Any
 
 from database.session import get_async_db
-from models.auth import User
+from database.models.auth import User
 from app.auth.schemas import Token, LoginRequest, UserResponse
 from app.auth.services import authenticate_user, refresh_access_token, logout_user
 from app.auth.dependencies import get_current_user, require_permissions
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+from api.limiter import limiter
 
 @router.post("/login", response_model=Token)
+@limiter.limit("5/minute")
 async def login(
+    request: Request,
     login_data: LoginRequest,
     db: AsyncSession = Depends(get_async_db)
 ) -> Any:

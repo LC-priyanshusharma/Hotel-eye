@@ -1,5 +1,5 @@
 from database.session import SessionLocal
-from models.auth import User
+from database.models.auth import User
 from app.auth.security import get_password_hash
 
 db = SessionLocal()

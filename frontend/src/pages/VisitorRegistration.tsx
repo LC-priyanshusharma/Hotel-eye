@@ -46,11 +46,13 @@ export const VisitorRegistration = () => {
         context.drawImage(videoRef.current, 0, 0);
         const base64 = canvasRef.current.toDataURL('image/jpeg');
         setPhotos(prev => ({ ...prev, [angle]: base64 }));
+        return base64;
       }
     }
+    return '';
   };
 
-  const submitRegistration = async () => {
+  const submitRegistration = async (finalPhotos = photos) => {
     setIsSubmitting(true);
     try {
       // NOTE: Uses relative path to rely on proxy, or full path if needed.
@@ -62,9 +64,9 @@ export const VisitorRegistration = () => {
         name: formData.name,
         email: formData.email,
         role: role,
-        photo_front: photos.front,
-        photo_left: photos.left,
-        photo_right: photos.right
+        photo_front: finalPhotos.front,
+        photo_left: finalPhotos.left,
+        photo_right: finalPhotos.right
       });
       setIsSuccess(true);
       stopCamera();
@@ -97,8 +99,9 @@ export const VisitorRegistration = () => {
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-600/30 blur-[100px] rounded-full pointer-events-none" />
 
       <div className="p-8 z-10 flex-1 flex flex-col">
-        <div className="mb-10 text-center">
-          <h1 className="text-3xl font-extrabold mb-2 tracking-tight">Welcome to LogicEye</h1>
+        <div className="flex flex-col items-center mb-8 text-center">
+          <img src="/lc_logo.png" alt="LC Logo" className="w-20 h-auto mb-4 rounded-xl shadow-lg" />
+          <h1 className="text-3xl font-extrabold mb-2 tracking-tight">Welcome to Logic Clutch</h1>
           <p className="text-zinc-400 font-medium">
             {role === 'EMPLOYEE' ? 'Employee Self-Registration' : 'Visitor Self-Registration'}
           </p>
@@ -106,12 +109,12 @@ export const VisitorRegistration = () => {
 
         {step === 1 && (
           <div className="space-y-6 flex-1 flex flex-col justify-center">
-            <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-6 rounded-3xl shadow-xl">
+            <div className="bg-foreground/5 backdrop-blur-xl border border-foreground/10 p-6 rounded-3xl shadow-xl">
               <div className="mb-6">
                 <label className="block text-sm font-semibold mb-2 text-indigo-200">Full Name</label>
                 <input 
                   type="text" 
-                  className="w-full bg-black/50 border border-white/10 rounded-2xl px-5 py-4 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition-all text-white placeholder-white/30"
+                  className="w-full bg-background/50 border border-foreground/10 rounded-2xl px-5 py-4 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition-all text-white placeholder-white/30"
                   value={formData.name}
                   onChange={e => setFormData({ ...formData, name: e.target.value })}
                   placeholder="e.g. John Doe"
@@ -121,7 +124,7 @@ export const VisitorRegistration = () => {
                 <label className="block text-sm font-semibold mb-2 text-indigo-200">Email Address (Optional)</label>
                 <input 
                   type="email" 
-                  className="w-full bg-black/50 border border-white/10 rounded-2xl px-5 py-4 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition-all text-white placeholder-white/30"
+                  className="w-full bg-background/50 border border-foreground/10 rounded-2xl px-5 py-4 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition-all text-white placeholder-white/30"
                   value={formData.email}
                   onChange={e => setFormData({ ...formData, email: e.target.value })}
                   placeholder="john@example.com"
@@ -145,7 +148,7 @@ export const VisitorRegistration = () => {
               <p className="text-indigo-300">Step {step - 1} of 3</p>
             </div>
             
-            <div className="relative w-full aspect-square bg-black/50 rounded-full overflow-hidden mb-8 border-4 border-indigo-500/50 shadow-[0_0_30px_rgba(99,102,241,0.2)]">
+            <div className="relative w-full aspect-square bg-background/50 rounded-full overflow-hidden mb-8 border-4 border-indigo-500/50 shadow-[0_0_30px_rgba(99,102,241,0.2)]">
               <video 
                 ref={videoRef} 
                 autoPlay 
@@ -156,7 +159,7 @@ export const VisitorRegistration = () => {
               <canvas ref={canvasRef} className="hidden" />
               
               <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-end pb-8">
-                <span className="bg-black/70 backdrop-blur-md px-6 py-3 rounded-full text-sm font-bold text-white shadow-xl border border-white/10">
+                <span className="bg-background/70 backdrop-blur-md px-6 py-3 rounded-full text-sm font-bold text-white shadow-xl border border-foreground/10">
                   {step === 2 && "Look Straight Ahead"}
                   {step === 3 && "Turn Head Slightly Left"}
                   {step === 4 && "Turn Head Slightly Right"}
@@ -168,12 +171,12 @@ export const VisitorRegistration = () => {
               onClick={() => {
                 if (step === 2) capturePhoto('front');
                 if (step === 3) capturePhoto('left');
-                if (step === 4) capturePhoto('right');
                 
                 if (step < 4) {
                   setStep(step + 1);
                 } else {
-                  submitRegistration();
+                  const base64 = capturePhoto('right');
+                  submitRegistration({ ...photos, right: base64 });
                 }
               }}
               disabled={isSubmitting}

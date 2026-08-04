@@ -7,7 +7,7 @@ export const transitions = {
   standard: { type: "tween", duration: 0.25, ease: [0.25, 0.1, 0.25, 1.0] }, // Smooth standard curve
   complex: { type: "spring", stiffness: 260, damping: 20 },
   slow: { type: "tween", duration: 0.4, ease: "easeInOut" }
-};
+} as const;
 
 export const fadeInUp: Variants = {
   hidden: { opacity: 0, y: 20 },

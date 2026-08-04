@@ -35,12 +35,6 @@ class GestureWorker(IFrameObserver):
 
     def _run(self):
         logger.info(f"Gesture thread {self.camera_id} starting up...")
-        try:
-            self.detector = GestureDetector()
-        except Exception as e:
-            logger.error(f"Failed to load Gesture Detector: {e}")
-            return
-            
         last_time = 0
         min_interval = 1.0 / config.GESTURE_FPS if config.GESTURE_FPS > 0 else 0
         
@@ -61,6 +55,22 @@ class GestureWorker(IFrameObserver):
                 yolo_detections = packet["detections"]
                 original_timestamp = packet["timestamp"]
                 
+                active_plugins = config.CAMERA_PLUGINS.get(self.camera_id, [])
+                is_enabled = "GestureDetectionPlugin" in active_plugins
+                
+                if not is_enabled:
+                    continue
+                    
+                # Lazily instantiate to save memory if never used
+                if self.detector is None:
+                    logger.info(f"GestureDetector initializing for {self.camera_id} (Lazy Load)...")
+                    try:
+                        from .detector import GestureDetector
+                        self.detector = GestureDetector()
+                    except Exception as e:
+                        logger.error(f"Failed to load Gesture Detector: {e}")
+                        continue
+
                 # Detect hands/gestures
                 hands = self.detector.detect(frame)
                 

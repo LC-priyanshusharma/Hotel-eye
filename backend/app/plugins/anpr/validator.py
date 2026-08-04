@@ -22,9 +22,9 @@ class PlateValidator:
 
     # Format strategies (simplified for regex representation)
     STRATEGIES = {
-        "private": re.compile(r'^([A-Z]{2})\s*([0-9]{1,2})\s*([A-Z]{1,3})\s*([0-9]{4})$'),
-        "commercial": re.compile(r'^([A-Z]{2})\s*([0-9]{1,2})\s*([A-Z]{1,3})\s*([0-9]{4})$'),
-        "ev": re.compile(r'^([A-Z]{2})\s*([0-9]{1,2})\s*([A-Z]{1,3})\s*([0-9]{4})$'),
+        "private": re.compile(r'^([A-Z]{2})\s*([0-9]{1,2})\s*([A-Z]{0,3})\s*([0-9]{4})$'),
+        "commercial": re.compile(r'^([A-Z]{2})\s*([0-9]{1,2})\s*([A-Z]{0,3})\s*([0-9]{4})$'),
+        "ev": re.compile(r'^([A-Z]{2})\s*([0-9]{1,2})\s*([A-Z]{0,3})\s*([0-9]{4})$'),
         "diplomatic": re.compile(r'^([0-9]{1,3})\s*(CD|CC)\s*([0-9]{1,4})$'),
         "military": re.compile(r'^\u2191\s*([0-9]{2})\s*([A-Z])\s*([0-9]{4,6})\s*([A-Z])$'),
         "bh_series": re.compile(r'^([0-9]{2})\s*BH\s*([0-9]{4})\s*([A-Z]{1,2})$')
@@ -61,30 +61,28 @@ class PlateValidator:
             if regex and regex.match(cleaned):
                 return True, cleaned
 
-        # 2. Smart Repair (only if enabled and confidence is below threshold)
-        if anpr_app_config.validation.smart_repair_enabled and confidence < anpr_app_config.validation.repair_confidence_threshold:
+        # 2. Smart Repair (always run if enabled to strictly enforce 'O' vs '0' on Indian formats)
+        if anpr_app_config.validation.smart_repair_enabled:
             # We attempt repair assuming standard format (State, RTO, Series, Number)
-            if 8 <= len(cleaned) <= 11 and ("private" in active_strategies or "commercial" in active_strategies):
-                num_part = cleaned[-4:]
-                fixed_num = cls._fix_segment(num_part, 'num')
+            if 6 <= len(cleaned) <= 11 and ("private" in active_strategies or "commercial" in active_strategies):
+                state_part = cls._fix_segment(cleaned[:2], 'char')
+                num_part = cls._fix_segment(cleaned[-4:], 'num')
+                middle_part = cleaned[2:-4]
                 
-                state_part = cleaned[:2]
-                fixed_state = cls._fix_segment(state_part, 'char')
-                
-                rto_part = cleaned[2:4]
-                fixed_rto = cls._fix_segment(rto_part, 'num')
-                
-                series_part = cleaned[4:-4]
-                fixed_series = cls._fix_segment(series_part, 'char')
-                
-                candidate = f"{fixed_state}{fixed_rto}{fixed_series}{fixed_num}"
-                
-                # Check candidate against standard format
-                if cls.STRATEGIES["private"].match(candidate):
-                    return True, candidate
+                # Try RTO length 1 or 2
+                for rto_len in [1, 2]:
+                    if rto_len > len(middle_part):
+                        continue
+                        
+                    rto_part = cls._fix_segment(middle_part[:rto_len], 'num')
+                    series_part = cls._fix_segment(middle_part[rto_len:], 'char')
+                    
+                    candidate = f"{state_part}{rto_part}{series_part}{num_part}"
+                    
+                    # Check candidate against standard format
+                    if cls.STRATEGIES["private"].match(candidate):
+                        return True, candidate
 
-        # Lenient fallback
-        if len(cleaned) >= 4:
-            return True, cleaned
-            
+        # Strict validation: If it doesn't match an Indian plate format, REJECT it.
+        # This completely eliminates hallucinations like "PE3G4" or partial reads.
         return False, cleaned

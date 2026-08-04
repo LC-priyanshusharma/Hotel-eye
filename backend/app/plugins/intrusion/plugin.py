@@ -41,7 +41,8 @@ class IntrusionDetectionPlugin(BaseDetectionPlugin):
         if camera_id not in self.known_intrusions:
             self.known_intrusions[camera_id] = set()
             
-        zone_coords = self.config.get_zone_for_camera(camera_id) if self.config else []
+        camera_url = getattr(frame_data, 'camera_url', camera_id)
+        zone_coords = self.config.get_zone_for_camera(camera_url) if self.config else []
         if not zone_coords:
             return events
             

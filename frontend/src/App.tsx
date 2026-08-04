@@ -1,6 +1,7 @@
 
 
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { Toaster } from 'sonner'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Layout } from './layouts/Layout'
 import { Dashboard } from './pages/Dashboard'
@@ -10,6 +11,8 @@ import { Analytics, Events } from './pages/EventsAndAnalytics'
 import { ParkingAnalytics } from './pages/ParkingAnalytics'
 import { AttendanceAnalytics } from './pages/AttendanceAnalytics'
 import { FireAnalytics } from './pages/FireAnalytics'
+import { CartonAnalytics } from './pages/CartonAnalytics'
+import PPEAnalytics from './pages/PPEAnalytics';
 import ANPRAnalytics from './pages/ANPRAnalytics';
 import VisitorAnalytics from './pages/VisitorAnalytics';
 import RegisteredVisitors from './pages/RegisteredVisitors';
@@ -22,6 +25,7 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 
 import { useEffect } from 'react'
 import { useCameraStateStore } from './store/useCameraStateStore'
+import { useAppStore } from './store/useAppStore'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -37,6 +41,8 @@ const queryClient = new QueryClient({
 function App() {
   const connect = useCameraStateStore(state => state.connect)
   const disconnect = useCameraStateStore(state => state.disconnect)
+  const theme = useAppStore(state => state.theme)
+  
   useEffect(() => {
     connect()
     return () => disconnect()
@@ -60,6 +66,8 @@ function App() {
               <Route path="parking" element={<ParkingAnalytics />} />
               <Route path="attendance" element={<AttendanceAnalytics />} />
               <Route path="fire" element={<FireAnalytics />} />
+              <Route path="carton" element={<CartonAnalytics />} />
+              <Route path="ppe" element={<PPEAnalytics />} />
               <Route path="anpr" element={<ANPRAnalytics />} />
               <Route path="visitor" element={<VisitorAnalytics />} />
               <Route path="visitor-db" element={<RegisteredVisitors />} />
@@ -72,6 +80,7 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
+      <Toaster theme={theme === 'colorful' ? 'light' : theme} position="bottom-right" />
     </AuthProvider>
     </QueryClientProvider>
   )

@@ -70,11 +70,32 @@ class VisitorPlugin(BaseDetectionPlugin):
             
             # Find the person track whose bounding box contains the center of the face
             matched_track_id = int(cx + cy) # fallback
+            person_box = None
             for p in person_tracks:
                 px1, py1, px2, py2 = p["bbox"]
                 if px1 <= cx <= px2 and py1 <= cy <= py2:
                     matched_track_id = p["track_id"]
+                    person_box = p["bbox"]
                     break
+
+            h, w = frame_data.frame.shape[:2]
+            
+            # Prefer cropping the whole person so the snapshot looks good
+            if person_box is not None:
+                px1, py1, px2, py2 = person_box
+                cx1, cy1 = max(0, int(px1)), max(0, int(py1))
+                cx2, cy2 = min(w, int(px2)), min(h, int(py2))
+            else:
+                # Fallback to padded face box
+                pad_x = int((fx2 - fx1) * 0.5)
+                pad_y = int((fy2 - fy1) * 0.5)
+                cx1, cy1 = max(0, int(fx1 - pad_x)), max(0, int(fy1 - pad_y))
+                cx2, cy2 = min(w, int(fx2 + pad_x)), min(h, int(fy2 + pad_y))
+                
+            face_crop = None
+            if cx2 - cx1 > 10 and cy2 - cy1 > 10:
+                face_crop = frame_data.frame[cy1:cy2, cx1:cx2].copy()
+
                     
             # Removed known_visitors_cache check so we continuously re-verify faces to detect track swaps
             if matched_track_id in self.active_visits:
@@ -89,7 +110,7 @@ class VisitorPlugin(BaseDetectionPlugin):
             # Offload heavy DB matching to a background thread to prevent YOLO pipeline blocking
             threading.Thread(
                 target=self._async_db_match, 
-                args=(embedding_list, matched_track_id, camera_id, timestamp),
+                args=(embedding_list, matched_track_id, camera_id, timestamp, face_crop),
                 daemon=True
             ).start()
             
@@ -135,7 +156,18 @@ class VisitorPlugin(BaseDetectionPlugin):
             
         return events
 
-    def _async_db_match(self, embedding_list: List[float], track_id: int, camera_id: str, timestamp: float):
+    def _async_db_match(self, embedding_list: List[float], track_id: int, camera_id: str, timestamp: float, face_crop=None):
+        import cv2
+        import os
+        import uuid
+        
+        snapshot_path = None
+        if face_crop is not None:
+            os.makedirs("snapshots/visitors", exist_ok=True)
+            snapshot_filename = f"snapshots/visitors/vis_{uuid.uuid4().hex[:8]}.jpg"
+            cv2.imwrite(snapshot_filename, face_crop)
+            snapshot_path = snapshot_filename
+
         db = SessionLocal()
         try:
             repo = VisitorRepository(db)
@@ -186,8 +218,9 @@ class VisitorPlugin(BaseDetectionPlugin):
                         camera_id=camera_id,
                         timestamp=timestamp,
                         confidence=conf,
-                        metadata={"visitor_id": visitor_id, "name": match.name, "track_id": track_id}
+                        metadata={"visitor_id": visitor_id, "name": match.name, "track_id": track_id, "snapshot_file": snapshot_path}
                     ))
+                    logger.info(f"Appended pending event: {event_type} for track {track_id}")
             else:
                 unknown_visitor = repo.create_unknown_visitor(face_embedding=embedding_list)
                 event_type = VisitorEventType.UNKNOWN_PERSON
@@ -218,8 +251,9 @@ class VisitorPlugin(BaseDetectionPlugin):
                         camera_id=camera_id,
                         timestamp=timestamp,
                         confidence=0.0,
-                        metadata={"visitor_id": unknown_visitor.visitor_id, "track_id": track_id}
+                        metadata={"visitor_id": unknown_visitor.visitor_id, "track_id": track_id, "snapshot_file": snapshot_path}
                     ))
+                    logger.info(f"Appended pending event: {event_type.value} for track {track_id}")
         except Exception as e:
             logger.error(f"Async DB match failed: {e}")
         finally:

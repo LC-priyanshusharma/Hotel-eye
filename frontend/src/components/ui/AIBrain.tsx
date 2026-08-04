@@ -30,6 +30,7 @@ function BrainParticles() {
   return (
     <points ref={points}>
       <bufferGeometry>
+        {/* @ts-ignore */}
         <bufferAttribute
           attach="attributes-position"
           count={particleCount}

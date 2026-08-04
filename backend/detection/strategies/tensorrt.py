@@ -2,6 +2,7 @@ import os
 from loguru import logger
 from ultralytics import YOLO
 import numpy as np
+import threading
 
 from detection.interfaces.inference import IInferenceEngine
 
@@ -12,6 +13,7 @@ class TensorRTStrategy(IInferenceEngine):
     def __init__(self, model_path: str, conf: float, classes: list):
         self.conf = conf
         self.classes = classes
+        self.lock = threading.Lock()
         
         self.trt_model_path = model_path.replace(".pt", ".engine")
         
@@ -25,7 +27,10 @@ class TensorRTStrategy(IInferenceEngine):
         dummy_img = np.zeros((640, 640, 3), dtype=np.uint8)
         self.model(dummy_img, verbose=False)
 
-    def detect(self, frame: np.ndarray):
-        results = self.model(frame, conf=self.conf, classes=self.classes, verbose=False)
+    def detect(self, frame: np.ndarray, conf: float = None, classes: list = None):
+        conf_to_use = conf if conf is not None else self.conf
+        classes_to_use = classes if classes is not None else self.classes
+        with self.lock:
+            results = self.model(frame, conf=conf_to_use, classes=classes_to_use, verbose=False)
         return results[0]
 

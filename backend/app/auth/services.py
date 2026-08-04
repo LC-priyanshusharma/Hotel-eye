@@ -4,7 +4,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from models.auth import User, RefreshToken, AuditLog
+from database.models.auth import User, RefreshToken, AuditLog
 from app.auth.schemas import LoginRequest, Token
 from app.auth.security import verify_password, create_access_token
 

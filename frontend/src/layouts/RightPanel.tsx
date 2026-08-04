@@ -55,15 +55,6 @@ export function RightPanel() {
               <p className="text-sm font-medium">Unauthorized Person Detected</p>
               <p className="text-xs text-muted-foreground">Camera 1 - Lobby • Track ID: 12</p>
             </div>
-            
-            <div className="p-3 rounded-lg border-l-4 border-warning bg-warning/10 flex flex-col gap-1 cursor-pointer hover:bg-warning/20 transition-colors">
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span className="font-semibold text-warning">🟡 Warning</span>
-                <span>10:32:10</span>
-              </div>
-              <p className="text-sm font-medium">Crowd Density High (85%)</p>
-              <p className="text-xs text-muted-foreground">Camera 3 - Restaurant</p>
-            </div>
           </>
         )}
 

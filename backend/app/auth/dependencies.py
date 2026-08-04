@@ -1,11 +1,12 @@
 from fastapi import Depends, HTTPException, status, Security
 from fastapi.security import OAuth2PasswordBearer, SecurityScopes
+from fastapi import Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
 from database.session import get_async_db
-from models.auth import User, Role, Permission
+from database.models.auth import User, Role, Permission
 from app.auth.security import decode_access_token
 
 oauth2_scheme = OAuth2PasswordBearer(
@@ -83,3 +84,20 @@ def require_permissions(required_scopes: list[str]):
     Example: Depends(require_permissions(["users:manage"]))
     """
     return Security(get_current_user, scopes=required_scopes)
+
+async def get_current_user_query(
+    security_scopes: SecurityScopes,
+    token: str = Query(None),
+    db: AsyncSession = Depends(get_async_db)
+) -> User:
+    """
+    Extract token from query parameters instead of Authorization header.
+    Useful for WebSockets and <img> tags.
+    """
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return await get_current_user(security_scopes, token=token, db=db)

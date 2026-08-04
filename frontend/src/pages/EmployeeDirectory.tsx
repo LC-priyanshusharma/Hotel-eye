@@ -68,7 +68,8 @@ export default function EmployeeDirectory() {
 
     // Connect WebSocket to listen for new registrations in real-time
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws.current = new WebSocket(`${protocol}//${window.location.host}/ws/events`);
+    const token = localStorage.getItem('access_token') || '';
+    ws.current = new WebSocket(`${protocol}//${window.location.host}/ws/events?token=${encodeURIComponent(token)}`);
     ws.current.onmessage = (event) => {
       const data = JSON.parse(event.data);
       let shouldRefresh = false;
@@ -145,7 +146,7 @@ export default function EmployeeDirectory() {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
           <h2 className="text-xl font-semibold text-primary">Registered Employees</h2>
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 bg-black/40 p-1.5 rounded-lg border border-white/5 backdrop-blur-md">
+            <div className="flex items-center gap-2 bg-background/40 p-1.5 rounded-lg border border-foreground/5 backdrop-blur-md">
               <Filter className="w-4 h-4 text-gray-400 ml-1" />
               <input 
                 type="date" 
@@ -175,7 +176,7 @@ export default function EmployeeDirectory() {
             <div className="flex gap-2">
               <button 
                 onClick={() => setShowQrModal(true)}
-                className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-teal-500 to-emerald-600 text-white rounded-lg hover:from-teal-400 hover:to-emerald-500 transition-all font-medium shadow-[0_0_20px_rgba(20,184,166,0.3)] hover:shadow-[0_0_30px_rgba(20,184,166,0.5)] border border-white/10"
+                className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-teal-500 to-emerald-600 text-white rounded-lg hover:from-teal-400 hover:to-emerald-500 transition-all font-medium shadow-[0_0_20px_rgba(20,184,166,0.3)] hover:shadow-[0_0_30px_rgba(20,184,166,0.5)] border border-foreground/10"
               >
                 <QrCode className="w-4 h-4" />
                 Generate Employee QR
@@ -287,16 +288,16 @@ export default function EmployeeDirectory() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-background/60 backdrop-blur-md z-50 flex items-center justify-center p-4"
         >
           <motion.div 
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             className="glass-pro rounded-2xl w-full max-w-md overflow-hidden glow-primary"
           >
-            <div className="p-4 border-b border-white/10 flex justify-between items-center bg-black/40">
+            <div className="p-4 border-b border-foreground/10 flex justify-between items-center bg-background/40">
               <h3 className="font-semibold text-lg text-white flex items-center gap-2"><QrCode className="w-5 h-5 text-primary" /> Employee Registration QR</h3>
-              <button onClick={() => setShowQrModal(false)} className="text-muted-foreground hover:text-white transition bg-white/5 hover:bg-white/10 p-1.5 rounded-full">
+              <button onClick={() => setShowQrModal(false)} className="text-muted-foreground hover:text-white transition bg-foreground/5 hover:bg-foreground/10 p-1.5 rounded-full">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -309,7 +310,7 @@ export default function EmployeeDirectory() {
               </p>
               <div className="w-full mt-2">
                 <label className="block text-[10px] font-bold text-primary mb-2 uppercase tracking-widest">Direct Registration Link</label>
-                <div className="flex bg-black/50 border border-white/10 rounded-lg overflow-hidden focus-within:border-primary transition-colors">
+                <div className="flex bg-background/50 border border-foreground/10 rounded-lg overflow-hidden focus-within:border-primary transition-colors">
                   <input 
                     type="text" 
                     readOnly 
@@ -320,7 +321,7 @@ export default function EmployeeDirectory() {
                     onClick={() => {
                       navigator.clipboard.writeText(`${safeUrl}/register?role=employee`);
                     }}
-                    className="bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 px-3 transition-colors flex items-center justify-center border-l border-white/10"
+                    className="bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 px-3 transition-colors flex items-center justify-center border-l border-foreground/10"
                   >
                     Copy
                   </button>

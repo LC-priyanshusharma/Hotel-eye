@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useUsers } from '../../api/hooks/useUsers'
 import { api } from '../../api/api'
 import { ZoneDrawer } from '../../components/ZoneDrawer'
+import { cn } from '@/utils/utils'
 
 function CameraStatusList() {
   const [statuses, setStatuses] = useState<Record<string, string>>({})
@@ -25,7 +26,7 @@ function CameraStatusList() {
   }, [])
 
   return (
-    <div className="glass-panel p-6 rounded-2xl border border-white/10 relative overflow-hidden">
+    <div className="glass-panel p-6 rounded-2xl border border-foreground/10 relative overflow-hidden">
       <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-[40px] pointer-events-none -mt-10 -mr-10" />
       <h3 className="text-xs font-bold tracking-widest uppercase text-foreground mb-4 drop-shadow-md">Live Connections</h3>
       {Object.keys(statuses).length === 0 ? (
@@ -33,7 +34,7 @@ function CameraStatusList() {
       ) : (
         <div className="space-y-3 relative z-10">
           {Object.entries(statuses).map(([url, status]) => (
-            <div key={url} className="flex flex-col gap-1 bg-black/40 p-4 rounded-xl border border-white/5 hover:bg-black/60 transition-colors">
+            <div key={url} className="flex flex-col gap-1 bg-background/40 p-4 rounded-xl border border-foreground/5 hover:bg-background/60 transition-colors">
               <span className="text-sm font-medium truncate text-white" title={url}>{url}</span>
               <div className="flex items-center gap-2">
                 <div className={`w-2 h-2 rounded-full ${status === 'Connected' ? 'bg-success animate-pulse glow-success' : 'bg-warning animate-pulse glow-warning'}`} />
@@ -51,6 +52,8 @@ export function Settings() {
   const [activeTab, setActiveTab] = useState('Cameras')
   const [cameraName, setCameraName] = useState('')
   const [rtspUrl, setRtspUrl] = useState('')
+  const [sourceType, setSourceType] = useState('rtsp')
+  const [videoFile, setVideoFile] = useState<File | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const { addToast } = useToastStore()
   const { user } = useAuth()
@@ -98,16 +101,35 @@ export function Settings() {
 
   const handleAddCamera = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!cameraName || !rtspUrl) return
+    if (!cameraName) return
+    if (sourceType === 'rtsp' && !rtspUrl) return
+    if (sourceType === 'video_file' && !videoFile) return
 
     setIsSubmitting(true)
     try {
-      const res = await api.post('/api/cameras', { name: cameraName, rtsp_url: rtspUrl })
+      let finalSource = rtspUrl
+
+      if (sourceType === 'video_file' && videoFile) {
+        const formData = new FormData()
+        formData.append('file', videoFile)
+        const uploadRes = await api.post('/api/cameras/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        })
+        finalSource = uploadRes.data.file_path
+      }
+
+      const res = await api.post('/api/cameras', { 
+        name: cameraName, 
+        rtsp_url: finalSource,
+        source_type: sourceType,
+        source: finalSource
+      })
 
       if (res.status === 200) {
         addToast({ title: 'Camera Added', message: `Successfully connected to ${cameraName}`, type: 'success' })
         setCameraName('')
         setRtspUrl('')
+        setVideoFile(null)
       } else {
         throw new Error('Failed to add camera')
       }
@@ -145,18 +167,18 @@ export function Settings() {
                 "text-left px-5 py-3 rounded-xl font-bold text-sm transition-all relative overflow-hidden group",
                 activeTab === tab 
                   ? "bg-primary text-white shadow-lg glow-primary" 
-                  : "text-muted-foreground hover:text-white glass-panel border border-white/5 hover:border-white/20"
+                  : "text-muted-foreground hover:text-white glass-panel border border-foreground/5 hover:border-foreground/20"
               )}
             >
               {activeTab === tab && (
-                <motion.div layoutId="settingsTab" className="absolute inset-0 bg-white/10" />
+                <motion.div layoutId="settingsTab" className="absolute inset-0 bg-foreground/10" />
               )}
               <span className="relative z-10">{tab}</span>
             </button>
           ))}
         </div>
 
-        <div className="col-span-1 md:col-span-3 glass-pro rounded-3xl p-8 border border-white/10 relative overflow-hidden min-h-[500px]">
+        <div className="col-span-1 md:col-span-3 glass-pro rounded-3xl p-8 border border-foreground/10 relative overflow-hidden min-h-[500px]">
           <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-[60px] pointer-events-none -mr-20 -mt-20" />
           <AnimatePresence mode="wait">
             <motion.div
@@ -186,7 +208,7 @@ export function Settings() {
                       step="0.05"
                       value={backendConfig.CONFIDENCE_THRESHOLD || 0.4} 
                       onChange={e => setBackendConfig({...backendConfig, CONFIDENCE_THRESHOLD: parseFloat(e.target.value)})}
-                      className="bg-black/50 text-white border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 w-full max-w-md transition-all shadow-inner" 
+                      className="bg-background/50 text-white border border-foreground/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 w-full max-w-md transition-all shadow-inner" 
                     />
                   </div>
 
@@ -196,7 +218,7 @@ export function Settings() {
                       type="number" 
                       value={backendConfig.LOITERING_THRESHOLD_SECONDS || 10} 
                       onChange={e => setBackendConfig({...backendConfig, LOITERING_THRESHOLD_SECONDS: parseFloat(e.target.value)})}
-                      className="bg-black/50 text-white border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 w-full max-w-md transition-all shadow-inner" 
+                      className="bg-background/50 text-white border border-foreground/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 w-full max-w-md transition-all shadow-inner" 
                     />
                   </div>
                   
@@ -206,18 +228,18 @@ export function Settings() {
                       type="number" 
                       value={backendConfig.FRAME_SKIP || 3} 
                       onChange={e => setBackendConfig({...backendConfig, FRAME_SKIP: parseInt(e.target.value)})}
-                      className="bg-black/50 text-white border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 w-full max-w-md transition-all shadow-inner" 
+                      className="bg-background/50 text-white border border-foreground/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 w-full max-w-md transition-all shadow-inner" 
                     />
                   </div>
 
-                  <div className="flex items-center gap-4 py-6 border-t border-white/5 mt-8">
+                  <div className="flex items-center gap-4 py-6 border-t border-foreground/5 mt-8">
                     <div className="flex-1">
                       <h3 className="font-bold text-white tracking-wide mb-1">Enable Gesture Detection</h3>
                       <p className="text-sm text-muted-foreground">Turn on gesture tracking (Hands/Poses) across all live feeds.</p>
                     </div>
                     <div 
                       onClick={() => setBackendConfig({...backendConfig, GESTURE_ENABLED: !backendConfig.GESTURE_ENABLED})}
-                      className={`w-14 h-7 rounded-full relative cursor-pointer shadow-inner transition-colors duration-300 ${backendConfig.GESTURE_ENABLED ? 'bg-primary glow-primary' : 'bg-black/50 border border-white/10'}`}
+                      className={`w-14 h-7 rounded-full relative cursor-pointer shadow-inner transition-colors duration-300 ${backendConfig.GESTURE_ENABLED ? 'bg-primary glow-primary' : 'bg-background/50 border border-foreground/10'}`}
                     >
                       <motion.div 
                         layout
@@ -258,17 +280,59 @@ export function Settings() {
                   </div>
 
                   <div className="flex flex-col gap-2">
-                    <label className="text-sm font-medium text-foreground">RTSP URL</label>
-                    <input 
-                      type="text" 
-                      value={rtspUrl}
-                      onChange={(e) => setRtspUrl(e.target.value)}
-                      placeholder="rtsp://admin:pass@192.168.1.100/stream" 
-                      className="bg-background border border-border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/50 w-full font-mono text-sm" 
-                      required
-                    />
-                    <p className="text-xs text-muted-foreground">Credentials containing special characters will be automatically encoded.</p>
+                    <label className="text-sm font-medium text-foreground">Source Type</label>
+                    <select
+                      value={sourceType}
+                      onChange={(e) => setSourceType(e.target.value)}
+                      className="bg-background border border-border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/50 w-full"
+                    >
+                      <option value="rtsp">RTSP Stream</option>
+                      <option value="video_file">Local Video</option>
+                      <option value="webcam">USB Camera</option>
+                    </select>
                   </div>
+
+                  {sourceType === 'rtsp' && (
+                    <div className="flex flex-col gap-2">
+                      <label className="text-sm font-medium text-foreground">RTSP URL</label>
+                      <input 
+                        type="text" 
+                        value={rtspUrl}
+                        onChange={(e) => setRtspUrl(e.target.value)}
+                        placeholder="rtsp://admin:pass@192.168.1.100/stream" 
+                        className="bg-background border border-border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/50 w-full font-mono text-sm" 
+                        required
+                      />
+                      <p className="text-xs text-muted-foreground">Credentials containing special characters will be automatically encoded.</p>
+                    </div>
+                  )}
+
+                  {sourceType === 'webcam' && (
+                    <div className="flex flex-col gap-2">
+                      <label className="text-sm font-medium text-foreground">Camera Index</label>
+                      <input 
+                        type="text" 
+                        value={rtspUrl}
+                        onChange={(e) => setRtspUrl(e.target.value)}
+                        placeholder="0 or 1" 
+                        className="bg-background border border-border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/50 w-full font-mono text-sm" 
+                        required
+                      />
+                    </div>
+                  )}
+
+                  {sourceType === 'video_file' && (
+                    <div className="flex flex-col gap-2">
+                      <label className="text-sm font-medium text-foreground">Video File</label>
+                      <input 
+                        type="file"
+                        accept="video/mp4,video/avi"
+                        onChange={(e) => setVideoFile(e.target.files?.[0] || null)}
+                        className="bg-background border border-border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 w-full text-sm"
+                        required
+                      />
+                    </div>
+                  )}
 
                   <button 
                     type="submit" 

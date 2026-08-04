@@ -63,10 +63,10 @@ export function ParkingAnalytics() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ type: 'spring', stiffness: 300, damping: 20, delay: i * 0.1 }}
                 whileHover={{ y: -5, scale: 1.01 }}
-                className="glass-pro rounded-3xl border border-white/5 overflow-hidden flex flex-col group cursor-pointer transition-all duration-300"
+                className="glass-pro rounded-3xl border border-foreground/5 overflow-hidden flex flex-col group cursor-pointer transition-all duration-300"
               >
                 {/* Header Graphic */}
-                <div className="h-28 bg-black/40 relative flex items-center justify-between px-8 border-b border-white/5">
+                <div className="h-28 bg-background/40 relative flex items-center justify-between px-8 border-b border-foreground/5">
                   <div className="absolute top-0 right-0 w-48 h-48 bg-primary/20 rounded-full blur-[50px] group-hover:opacity-100 opacity-50 transition-opacity pointer-events-none -mr-16 -mt-16" />
                   <div className="flex flex-col relative z-10">
                     <span className="text-[10px] font-bold text-primary uppercase tracking-widest mb-1">Camera Stream</span>
@@ -74,7 +74,7 @@ export function ParkingAnalytics() {
                       {camId.split('/').pop() || camId}
                     </span>
                   </div>
-                  <div className="relative z-10 w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center shadow-lg backdrop-blur-md group-hover:scale-110 transition-transform">
+                  <div className="relative z-10 w-14 h-14 rounded-2xl bg-foreground/5 border border-foreground/10 flex items-center justify-center shadow-lg backdrop-blur-md group-hover:scale-110 transition-transform">
                     <Car className={cn("w-6 h-6", utilization > 90 ? "text-danger" : "text-primary")} />
                   </div>
                 </div>
@@ -106,7 +106,7 @@ export function ParkingAnalytics() {
                       <span>Utilization</span>
                       <span>{Math.round(utilization)}%</span>
                     </div>
-                    <div className="w-full h-2 bg-black/40 rounded-full overflow-hidden">
+                    <div className="w-full h-2 bg-background/40 rounded-full overflow-hidden">
                       <div 
                         className={cn("h-full transition-all duration-1000 ease-out", 
                           utilization > 90 ? "bg-danger" : utilization > 60 ? "bg-warning" : "bg-primary"
@@ -117,7 +117,7 @@ export function ParkingAnalytics() {
                   </div>
                   
                   {/* Spot Map Mock */}
-                  <div className="mt-4 border-t border-white/5 pt-4">
+                  <div className="mt-4 border-t border-foreground/5 pt-4">
                     <div className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wider">Live Slot Map</div>
                     <div className="flex gap-2 flex-wrap">
                       {data.spot_status.map((isOccupied: boolean, idx: number) => (

@@ -3,7 +3,7 @@ import { Responsive, WidthProvider } from 'react-grid-layout/legacy'
 import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
 import { CameraCard } from '@/components/camera/CameraCard'
-import { LayoutGrid, Grid3X3, Grid2X2, Grid, LayoutTemplate, Plus, X } from 'lucide-react'
+import { LayoutGrid, Grid3X3, Grid2X2, Grid, LayoutTemplate, Plus, X, Play, Square } from 'lucide-react'
 import { cn } from '@/utils/utils'
 import { api } from '@/api/api'
 import { LiveNotificationSidebar } from './LiveNotificationSidebar'
@@ -33,8 +33,8 @@ export function LiveCameras() {
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const fetchCameras = () => {
-    fetch('/api/cameras')
-      .then(res => res.json())
+    api.get('/api/cameras')
+      .then(res => res.data)
       .then(data => {
         if (data && data.status === 'success' && Array.isArray(data.cameras)) {
           setBackendCameras(data.cameras)
@@ -43,8 +43,23 @@ export function LiveCameras() {
       .catch(err => console.error("Failed to fetch active cameras", err))
   }
 
+  const [pipelineStatuses, setPipelineStatuses] = useState<Record<string, string>>({})
+
   useEffect(() => {
     fetchCameras()
+    
+    const fetchStatuses = () => {
+      api.get(`/api/cameras/status?t=${Date.now()}`)
+        .then(res => res.data)
+        .then(data => {
+          if (data) setPipelineStatuses(data)
+        })
+        .catch(err => console.error("Failed to fetch camera statuses", err))
+    }
+    
+    fetchStatuses()
+    const interval = setInterval(fetchStatuses, 3000)
+    return () => clearInterval(interval)
   }, [])
   
   const handleAddCamera = async (e: React.FormEvent) => {
@@ -67,24 +82,28 @@ export function LiveCameras() {
     }
   }
   
-  const allCameraIds = Array.from(new Set([...(cameraIdsStr ? cameraIdsStr.split(',') : []), ...backendCameras.map(c => c.rtsp_url)]))
+  // Use real backend IDs
+  const allCameraIds = Array.from(new Set(backendCameras.map((c: any) => c.id)))
   
   const cameras = allCameraIds
     .filter(camId => camId !== 'SYSTEM')
     .map((camId, idx) => {
-    const dbCam = backendCameras.find(c => c.rtsp_url === camId)
+    const dbCam = backendCameras.find((c: any) => c.id === camId)
     let name = dbCam ? dbCam.name : `Camera ${idx + 1}`
     
     if (!dbCam) {
       if (camId.includes('hlo.mp4')) name = 'ANPR Camera'
+      else if (camId.includes('CHECK IN')) name = 'Check In Camera'
+      else if (camId.includes('CHECK OUT')) name = 'Check Out Camera'
       else if (camId.includes('.mp4')) name = 'Camera 1 Test Video'
       if (camId.includes('192.168.1.121')) name = 'Camera 2 Lobby'
-      if (camId.includes('192.168.1.122')) name = 'Camera 3 Room'
+      if (camId.includes('332263_medium.mp4')) name = 'Carton Counting'
     }
     
     return {
       id: camId,
-      name
+      name,
+      location: `Zone ${idx + 1}`
     }
   })
 
@@ -118,7 +137,7 @@ export function LiveCameras() {
       {/* Main Grid Area */}
       <div className="flex flex-col flex-1 overflow-hidden relative">
         {/* Toolbar */}
-        <div className="h-14 glass-panel border-b border-white/5 flex items-center justify-between px-6 shrink-0 z-10">
+        <div className="h-14 glass-panel border-b border-foreground/5 flex items-center justify-between px-6 shrink-0 z-10">
           <div className="flex items-center gap-3">
             <span className="font-bold text-sm tracking-widest uppercase text-foreground drop-shadow-md">NVR Grid Control</span>
             {activeCameraId && (
@@ -134,13 +153,37 @@ export function LiveCameras() {
           {!activeCameraId && (
             <div className="flex items-center gap-4">
               <button
+                onClick={async () => {
+                  try {
+                    await api.post('/api/cameras/start-all');
+                    // Force refresh statuses after a short delay
+                    setTimeout(() => fetchCameras(), 500);
+                  } catch (err) { console.error(err) }
+                }}
+                className="flex items-center gap-2 px-4 py-1.5 bg-success/20 hover:bg-success/40 text-success hover:text-white rounded-lg text-xs font-bold transition-all border border-success/30 glow-success hover-lift"
+              >
+                <Play className="w-4 h-4 fill-current" /> Start All
+              </button>
+              
+              <button
+                onClick={async () => {
+                  try {
+                    await api.post('/api/cameras/stop-all');
+                  } catch (err) { console.error(err) }
+                }}
+                className="flex items-center gap-2 px-4 py-1.5 bg-danger/20 hover:bg-danger/40 text-danger hover:text-white rounded-lg text-xs font-bold transition-all border border-danger/30 glow-danger hover-lift"
+              >
+                <Square className="w-4 h-4 fill-current" /> Stop All
+              </button>
+
+              <button
                 onClick={() => setIsAddingCamera(true)}
                 className="flex items-center gap-2 px-4 py-1.5 bg-primary/20 hover:bg-primary/40 text-primary hover:text-white rounded-lg text-xs font-bold transition-all border border-primary/30 glow-primary hover-lift"
               >
                 <Plus className="w-4 h-4" /> Add Stream
               </button>
               
-              <div className="flex bg-[#0A0A0A]/60 p-1.5 rounded-xl border border-white/10 shadow-inner backdrop-blur-md gap-1">
+              <div className="flex bg-card/60 p-1.5 rounded-xl border border-foreground/10 shadow-inner backdrop-blur-md gap-1">
               {PRESET_LAYOUTS.map((preset) => (
               <button
                 key={preset.id}
@@ -149,7 +192,7 @@ export function LiveCameras() {
                   "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
                   activeLayout.id === preset.id 
                     ? "bg-primary text-white shadow-md glow-primary" 
-                    : "text-muted-foreground hover:text-white hover:bg-white/5"
+                    : "text-muted-foreground hover:text-white hover:bg-foreground/5"
                 )}
                 title={preset.label}
               >
@@ -168,27 +211,31 @@ export function LiveCameras() {
             <div className="flex-1 w-full p-4 flex items-center justify-center">
               <div className="w-full h-full max-w-7xl">
                 {cameras.filter(c => c.id === activeCameraId).map(cam => (
-                  <CameraCard key={cam.id} {...cam} />
+                  <CameraCard key={cam.id} {...cam} pipelineStatus={pipelineStatuses[cam.id] || "Stopped"} />
                 ))}
               </div>
             </div>
           ) : (
             <ResponsiveGridLayout
-            key={activeLayout.id} // Force re-render on layout change to reset grid proportions
+            key={activeLayout.id}
             className="layout"
             layouts={{ lg: layout }}
             breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
-            cols={{ lg: activeLayout.cols, md: Math.min(activeLayout.cols, 3), sm: Math.min(activeLayout.cols, 2), xs: 1, xxs: 1 }}
-            rowHeight={window.innerHeight / activeLayout.cols - (50 / activeLayout.cols)} // Approximate square aspect ratio
+            cols={{ lg: activeLayout.cols, md: activeLayout.cols, sm: 2, xs: 1, xxs: 1 }}
+            rowHeight={activeLayout.cols === 1 ? 600 : activeLayout.cols === 2 ? 400 : 250}
             isDraggable={true}
             isResizable={true}
-            margin={[8, 8]}
-            onLayoutChange={(newLayout: any) => setLayout(newLayout)}
+            margin={[16, 16]}
+            onLayoutChange={(newLayout: any) => {
+              // Only update if it actually changed to prevent infinite loops
+              const changed = JSON.stringify(newLayout) !== JSON.stringify(layout);
+              if (changed) setLayout(newLayout);
+            }}
             useCSSTransforms={true}
           >
             {cameras.map((cam) => (
               <div key={cam.id} className="cursor-move">
-                <CameraCard {...cam} />
+                <CameraCard {...cam} pipelineStatus={pipelineStatuses[cam.id] || "Stopped"} />
               </div>
             ))}
           </ResponsiveGridLayout>
@@ -197,11 +244,11 @@ export function LiveCameras() {
         
         {/* Add Camera Modal Overlay */}
         {isAddingCamera && (
-          <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-            <div className="glass-pro rounded-2xl p-8 w-full max-w-md shadow-2xl relative border border-white/10">
+          <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="glass-pro rounded-2xl p-8 w-full max-w-md shadow-2xl relative border border-foreground/10">
               <button 
                 onClick={() => setIsAddingCamera(false)}
-                className="absolute top-4 right-4 text-muted-foreground hover:text-white bg-white/5 p-2 rounded-full transition-colors"
+                className="absolute top-4 right-4 text-muted-foreground hover:text-white bg-foreground/5 p-2 rounded-full transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>

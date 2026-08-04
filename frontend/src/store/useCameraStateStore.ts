@@ -4,6 +4,7 @@ interface CameraState {
   timestamp: number
   events: any
   fps: number
+  latency_ms: number
 }
 
 interface CameraStateStore {
@@ -23,7 +24,8 @@ export const useCameraStateStore = create<CameraStateStore>((set, get) => ({
     
     console.log("Connecting to WebSocket...");
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(`${protocol}//${window.location.host}/ws/events`);
+    const token = localStorage.getItem('access_token') || '';
+    ws = new WebSocket(`${protocol}//${window.location.host}/ws/events?token=${encodeURIComponent(token)}`);
     
     ws.onopen = () => {
       console.log("WebSocket connected");
@@ -33,7 +35,12 @@ export const useCameraStateStore = create<CameraStateStore>((set, get) => ({
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        set({ states: data });
+        if (data.type === "telemetry" && data.states) {
+          set({ states: data.states });
+        } else {
+          // Fallback if the backend sends just the states directly
+          set({ states: data });
+        }
       } catch (e) {
         console.error("Failed to parse websocket message", e);
       }

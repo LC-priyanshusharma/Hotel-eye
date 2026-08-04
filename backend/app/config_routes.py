@@ -31,14 +31,24 @@ async def update_config(
     _ = require_permissions(["users:manage"])
 ) -> Any:
     """Update running configuration in memory."""
+    MUTABLE_KEYS = {"CAMERA_PLUGINS", "CONFIDENCE_THRESHOLD", "FRAME_SKIP", "GESTURE_ENABLED", "TRACKER_BACKEND"}
     try:
         for key, value in update_data.updates.items():
+            if key not in MUTABLE_KEYS:
+                raise HTTPException(status_code=403, detail=f"Config key '{key}' is not mutable at runtime")
+                
             if hasattr(config, key):
                 current_val = getattr(config, key)
                 if isinstance(current_val, dict) and isinstance(value, dict):
-                    # Safely merge dictionary updates (like CAMERA_PLUGINS)
-                    current_val.update(value)
-                    setattr(config, key, current_val)
+                    # Safely merge dictionary updates (like CAMERA_PLUGINS) by creating a new copy
+                    # This ensures Pydantic V2 detects the change and updates model_dump()
+                    new_val = current_val.copy()
+                    new_val.update(value)
+                    setattr(config, key, new_val)
+                    if key == "CAMERA_PLUGINS":
+                        config.save_plugins_state()
+                        
+                        pass
                 else:
                     setattr(config, key, value)
         return {"status": "success", "message": "Configuration updated in memory"}

@@ -1,8 +1,10 @@
 ocr:
   provider: "awiros"
-  model_path: "awiros/anpr-ocr-indian-v1"
+  local_model_path: "models/awiros"
+  download_if_missing: true
   use_gpu: false
-  confidence_threshold: 0.7
+  confidence_threshold: 0.55
+  fallback_provider: "paddle"
 
 plate_detector:
   provider: "indian_yolo"

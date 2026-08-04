@@ -10,6 +10,7 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+from sqlalchemy import Text
 
 # revision identifiers, used by Alembic.
 revision: str = '4ccf8fc33bbf'
@@ -35,11 +36,12 @@ def upgrade() -> None:
     op.create_table('cameras',
     sa.Column('id', sa.String(), nullable=False),
     sa.Column('name', sa.String(), nullable=False),
-    sa.Column('rtsp_url', sa.String(), nullable=False),
-    sa.Column('active', sa.Boolean(), nullable=True),
+    sa.Column('rtsp_url', sa.String(), nullable=True),
+    sa.Column('source_type', sa.String(), nullable=False, server_default='rtsp'),
+    sa.Column('source', sa.String(), nullable=True),
+    sa.Column('active', sa.Boolean(), nullable=True, server_default='true'),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
-    sa.PrimaryKeyConstraint('id'),
-    sa.UniqueConstraint('rtsp_url')
+    sa.PrimaryKeyConstraint('id')
     )
     # ### end Alembic commands ###
 

@@ -131,19 +131,30 @@ class AttendanceDetectionPlugin(BaseDetectionPlugin):
                             cross = AB_x * CD_y - AB_y * CD_x
                             
                             action = None
-                            if cross < 0:
-                                # Crossed left-to-right (Check In)
-                                if best_match_id not in self.employee_presence:
-                                    action = "CHECK IN"
-                                    self.employee_presence.add(best_match_id)
-                                    logger.success(f"✅ Employee {best_match_id} CHECKED IN on {camera_id}")
+                            is_checkout_cam = "CHECK OUT" in camera_id.upper()
+                            is_checkin_cam = "CHECK IN" in camera_id.upper()
+                            
+                            if is_checkout_cam:
+                                action = "CHECK OUT"
+                                self.employee_presence.discard(best_match_id)
+                                logger.info(f"🚪 Employee {best_match_id} CHECKED OUT from {camera_id}")
+                            elif is_checkin_cam:
+                                action = "CHECK IN"
+                                self.employee_presence.add(best_match_id)
+                                logger.success(f"✅ Employee {best_match_id} CHECKED IN on {camera_id}")
                             else:
-                                # Crossed right-to-left (Check Out)
-                                if best_match_id in self.employee_presence:
-                                    action = "CHECK OUT"
-                                    self.employee_presence.remove(best_match_id)
-                                    logger.info(f"🚪 Employee {best_match_id} CHECKED OUT from {camera_id}")
-                                    
+                                if cross < 0:
+                                    # Crossed left-to-right (Check In)
+                                    if best_match_id not in self.employee_presence:
+                                        action = "CHECK IN"
+                                        self.employee_presence.add(best_match_id)
+                                        logger.success(f"✅ Employee {best_match_id} CHECKED IN on {camera_id}")
+                                else:
+                                    # Crossed right-to-left (Check Out)
+                                    if best_match_id in self.employee_presence:
+                                        action = "CHECK OUT"
+                                        self.employee_presence.remove(best_match_id)
+                                        logger.info(f"🚪 Employee {best_match_id} CHECKED OUT from {camera_id}")
                             if action:
                                 log_entry = {
                                     "employee": f"Emp {best_match_id}", 
