@@ -19,14 +19,19 @@ class VisitorPlugin(BaseDetectionPlugin):
     """
     def __init__(self, app_config=None):
         super().__init__(app_config)
-        logger.info("Initialized VisitorPlugin (Async/Non-Blocking).")
+        logger.info("Initialized VisitorPlugin (Tripwire).")
         
-        # Debounce/Cache to prevent logging a visit every single frame.
-        self.active_visits = {}
         # Thread-safe list to hold events resolved by async DB lookups
         self.pending_events = []
         self.known_visitors_cache = {}
         self.events_lock = threading.Lock()
+        
+        # Tracking state for tripwire
+        self.track_last_seen = {} # track_id -> timestamp (for eviction)
+        self.track_y_history = {} # track_id -> int (last known y2)
+        self.track_face_cache = {} # track_id -> dict(embedding, crop)
+        self.track_crossed = set() # track_ids that have crossed the line
+        self.logged_visits = set() # track_ids that have already been logged
 
     @property
     def plugin_name(self) -> str:
@@ -37,21 +42,27 @@ class VisitorPlugin(BaseDetectionPlugin):
         return [0]
 
     def process_frame(self, frame_data: FrameData, tracker_context: TrackerContext) -> List[DetectionEvent]:
+        current_time = time.time()
+        
         # Flush any events that were resolved asynchronously in background threads
         with self.events_lock:
             events = self.pending_events[:]
             self.pending_events.clear()
             
-            # Evict stale tracks to prevent ID swapping and memory leaks
-            current_time = time.time()
-            stale_ids = [tid for tid, ts in self.active_visits.items() if current_time - ts > 15]
+            # Evict stale tracks to prevent memory leaks
+            stale_ids = [tid for tid, ts in self.track_last_seen.items() if current_time - ts > 15]
             for tid in stale_ids:
-                del self.active_visits[tid]
-                if tid in self.known_visitors_cache:
-                    del self.known_visitors_cache[tid]
+                del self.track_last_seen[tid]
+                self.track_y_history.pop(tid, None)
+                self.track_face_cache.pop(tid, None)
+                self.track_crossed.discard(tid)
+                self.logged_visits.discard(tid)
+                self.known_visitors_cache.pop(tid, None)
             
         camera_id = frame_data.camera_id
         timestamp = frame_data.timestamp
+        h, w = frame_data.frame.shape[:2]
+        line_y = int(h * 0.5) # The physical tripwire line at 50% height
         
         # Safely parse Ultralytics YOLO Results
         person_tracks = []
@@ -62,58 +73,68 @@ class VisitorPlugin(BaseDetectionPlugin):
                 if class_id == 0:
                     x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
                     person_tracks.append({"track_id": track_id, "bbox": [x1, y1, x2, y2]})
+                    self.track_last_seen[track_id] = current_time
                     
         # Process faces extracted asynchronously by FaceWorker
         for face in frame_data.faces:
-            fx1, fy1, fx2, fy2 = face["bbox"]
-            cx, cy = (fx1 + fx2) / 2, (fy1 + fy2) / 2
-            
-            # Find the person track whose bounding box contains the center of the face
-            matched_track_id = int(cx + cy) # fallback
-            person_box = None
-            for p in person_tracks:
-                px1, py1, px2, py2 = p["bbox"]
-                if px1 <= cx <= px2 and py1 <= cy <= py2:
-                    matched_track_id = p["track_id"]
-                    person_box = p["bbox"]
-                    break
-
-            h, w = frame_data.frame.shape[:2]
-            
-            # Prefer cropping the whole person so the snapshot looks good
-            if person_box is not None:
-                px1, py1, px2, py2 = person_box
-                cx1, cy1 = max(0, int(px1)), max(0, int(py1))
-                cx2, cy2 = min(w, int(px2)), min(h, int(py2))
-            else:
-                # Fallback to padded face box
-                pad_x = int((fx2 - fx1) * 0.5)
-                pad_y = int((fy2 - fy1) * 0.5)
-                cx1, cy1 = max(0, int(fx1 - pad_x)), max(0, int(fy1 - pad_y))
-                cx2, cy2 = min(w, int(fx2 + pad_x)), min(h, int(fy2 + pad_y))
+            # Filter out low-confidence false positive faces (like door handles/patterns)
+            if face.get("confidence", 1.0) < 0.5:
+                continue
                 
-            face_crop = None
-            if cx2 - cx1 > 10 and cy2 - cy1 > 10:
-                face_crop = frame_data.frame[cy1:cy2, cx1:cx2].copy()
+            matched_track_id = face.get("track_id")
+            if matched_track_id is None:
+                continue
 
+            # Cache the face for this track using the perfectly synced crop from FaceWorker
+            self.track_face_cache[matched_track_id] = {
+                "embedding": face["embedding"].tolist(),
+                "crop": face.get("crop")
+            }
+            
+        margin_x = int(w * 0.2)
+        line_start_x = margin_x
+        line_end_x = w - margin_x
+        
+        # Check line crossings and trigger events
+        for p in person_tracks:
+            tid = p["track_id"]
+            px1, py1, px2, py2 = p["bbox"]
+            current_y = int((py1 + py2) / 2) # Center of person bounding box
+            current_x = int((px1 + px2) / 2)
+            
+            last_y = self.track_y_history.get(tid)
+            if last_y is not None:
+                # Only consider it a crossing if they are horizontally within the line boundaries
+                if line_start_x <= current_x <= line_end_x:
+                    # Crossed going down OR crossed going up
+                    if (last_y < line_y <= current_y) or (last_y > line_y >= current_y):
+                        self.track_crossed.add(tid)
+                        logger.info(f"Person {tid} crossed the tripwire!")
+            self.track_y_history[tid] = current_y
+            
+            # If they crossed the line AND we have a face AND haven't logged them yet
+            if tid in self.track_crossed and tid not in self.logged_visits:
+                if tid in self.track_face_cache:
+                    self.logged_visits.add(tid)
+                    face_data = self.track_face_cache[tid]
+                    logger.info(f"Triggering DB match for {tid} (Crossed line + Face acquired)")
                     
-            # Removed known_visitors_cache check so we continuously re-verify faces to detect track swaps
-            if matched_track_id in self.active_visits:
-                if time.time() - self.active_visits[matched_track_id] < 2.0:
-                    continue
-                    
-            # Mark as active so we don't spawn 100 threads for the same person
-            self.active_visits[matched_track_id] = time.time()
+                    threading.Thread(
+                        target=self._async_db_match, 
+                        args=(face_data["embedding"], tid, camera_id, timestamp, face_data["crop"]),
+                        daemon=True
+                    ).start()
             
-            embedding_list = face["embedding"].tolist()
-            
-            # Offload heavy DB matching to a background thread to prevent YOLO pipeline blocking
-            threading.Thread(
-                target=self._async_db_match, 
-                args=(embedding_list, matched_track_id, camera_id, timestamp, face_crop),
-                daemon=True
-            ).start()
-            
+        # Collect drawings for the UI
+        drawings = [
+            {
+                "type": "line",
+                "coords": [[line_start_x, line_y], [line_end_x, line_y]],
+                "color": [0, 255, 255], # Yellow tripwire
+                "thickness": 2
+            }
+        ]
+        
         # For every person tracked on screen, if we know who they are, draw their name!
         for p in person_tracks:
             tid = p["track_id"]
@@ -134,25 +155,23 @@ class VisitorPlugin(BaseDetectionPlugin):
                 text_prefix = role
                 
                 # Emit a drawing event for the UI!
-                events.append(DetectionEvent(
-                    plugin_name=self.plugin_name,
-                    event_type="VISITOR_TRACK",
-                    camera_id=camera_id,
-                    timestamp=timestamp,
-                    confidence=1.0,
-                    metadata={
-                        "drawings": [
-                            {
-                                "type": "text",
-                                "coords": [float(px1), float(max(20, py1 - 25))],
-                                "color": color,
-                                "text": f"{text_prefix}: {info['name']} (ID: {info['visitor_id']})",
-                                "scale": 0.6,
-                                "thickness": 2
-                            }
-                        ]
-                    }
-                ))
+                drawings.append({
+                    "type": "text",
+                    "coords": [float(px1), float(max(20, py1 - 25))],
+                    "color": color,
+                    "text": f"{text_prefix}: {info['name']} (ID: {info['visitor_id']})",
+                    "scale": 0.6,
+                    "thickness": 2
+                })
+                
+        events.append(DetectionEvent(
+            plugin_name=self.plugin_name,
+            event_type="VISITOR_TRACK",
+            camera_id=camera_id,
+            timestamp=timestamp,
+            confidence=1.0,
+            metadata={"drawings": drawings}
+        ))
             
         return events
 
@@ -187,6 +206,10 @@ class VisitorPlugin(BaseDetectionPlugin):
                     event_type = VisitorEventType.EMPLOYEE_RECOGNIZED if match.role == 'EMPLOYEE' else VisitorEventType.VISITOR_RECOGNIZED
                 else:
                     event_type = VisitorEventType.UNKNOWN_PERSON
+                    # Update the UNKNOWN visitor's photo with the latest snapshot so it shows up in the UI
+                    if snapshot_path:
+                        match.photo = snapshot_path
+                        db.commit()
                     
                 conf = sim
                 
@@ -222,7 +245,7 @@ class VisitorPlugin(BaseDetectionPlugin):
                     ))
                     logger.info(f"Appended pending event: {event_type} for track {track_id}")
             else:
-                unknown_visitor = repo.create_unknown_visitor(face_embedding=embedding_list)
+                unknown_visitor = repo.create_unknown_visitor(face_embedding=embedding_list, snapshot_path=snapshot_path)
                 event_type = VisitorEventType.UNKNOWN_PERSON
                 
                 visit = repo.create_visit({

@@ -5,6 +5,7 @@ from loguru import logger
 from config.config import config
 from camera.stream_reader import StreamReader
 from camera.source import RTSPSource, FileSource, WebcamSource
+from video.gstreamer.pipeline import GStreamerSource
 from core.pipeline import InferenceWorker
 from tracking.gesture import GestureWorker
 from face.worker import FaceWorker
@@ -56,7 +57,10 @@ class CameraManager:
         elif source_type in ["video_file", "file"]:
             video_source = FileSource(actual_path, loop=True)
         else:
-            video_source = RTSPSource(actual_path)
+            if getattr(config, "VIDEO_BACKEND", "opencv").lower() == "gstreamer":
+                video_source = GStreamerSource(actual_path, camera_id)
+            else:
+                video_source = RTSPSource(actual_path)
             
         stream_reader = StreamReader(video_source, camera_id=camera_id, buffer_size=config.FRAME_BUFFER_SIZE)
         

@@ -69,12 +69,13 @@ class VisitorRepository:
             
         return None, -1.0
 
-    def create_unknown_visitor(self, face_embedding: list = None) -> Visitor:
+    def create_unknown_visitor(self, face_embedding: list = None, snapshot_path: str = None) -> Visitor:
         v_id = generate_visitor_id()
         db_visitor = Visitor(
             visitor_id=v_id,
             name="Unknown",
             face_embedding=face_embedding,
+            photo=snapshot_path,
             status="UNKNOWN",
             total_visits=0
         )

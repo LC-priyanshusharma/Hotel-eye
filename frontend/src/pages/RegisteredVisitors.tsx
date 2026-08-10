@@ -138,7 +138,7 @@ export default function RegisteredVisitors() {
     <div className="p-6 min-h-screen text-white relative z-10">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
         <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent drop-shadow-sm">
-          Visitor Database
+          Visitor Management
         </h1>
       </div>
       
@@ -189,9 +189,9 @@ export default function RegisteredVisitors() {
             <thead>
               <tr className="border-b border-gray-800 text-gray-400 text-sm">
                 <th className="pb-3 pl-2 font-medium">Profile</th>
-                <th className="pb-3 font-medium">Email</th>
-                <th className="pb-3 font-medium">ID</th>
-                <th className="pb-3 font-medium text-right pr-2">Registration Time</th>
+                <th className="pb-3 font-medium">Email & ID</th>
+                <th className="pb-3 font-medium">Status & Visits</th>
+                <th className="pb-3 font-medium text-right pr-2">First Seen</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/30">
@@ -208,7 +208,7 @@ export default function RegisteredVisitors() {
                   <td className="py-3 pl-2">
                     <div className="flex items-center gap-3">
                       {p.photo ? (
-                        <img src={`/api/${p.photo}`} alt={p.name} className="w-10 h-10 rounded-full object-cover border border-primary/30 group-hover:border-primary transition-colors shadow-sm" />
+                        <img src={`/${p.photo}`} alt={p.name} className="w-10 h-10 rounded-full object-cover border border-primary/30 group-hover:border-primary transition-colors shadow-sm" />
                       ) : (
                         <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center font-bold text-lg text-secondary-foreground border border-border group-hover:border-primary transition-colors">
                           {p.name.charAt(0)}
@@ -218,12 +218,26 @@ export default function RegisteredVisitors() {
                     </div>
                   </td>
                   <td className="py-3 text-muted-foreground text-sm">
-                    {p.email || <span className="text-gray-600 italic">Not provided</span>}
+                    <div className="flex flex-col items-start gap-1">
+                      {p.email || <span className="text-gray-600 italic">Not provided</span>}
+                      <span className="font-mono text-[10px] bg-gray-800/80 text-gray-400 px-1.5 py-0.5 rounded border border-gray-700">
+                        {p.visitor_id}
+                      </span>
+                    </div>
                   </td>
                   <td className="py-3">
-                    <span className="font-mono text-xs bg-gray-800/80 text-gray-300 px-2 py-1 rounded border border-gray-700">
-                      {p.visitor_id}
-                    </span>
+                    <div className="flex flex-col gap-1 items-start">
+                      {p.status === 'UNKNOWN' ? (
+                        <span className="bg-red-900/30 text-red-400 text-[10px] px-2 py-0.5 rounded border border-red-800 font-bold uppercase tracking-wider">UNKNOWN</span>
+                      ) : (
+                        <span className="bg-green-900/30 text-green-400 text-[10px] px-2 py-0.5 rounded border border-green-800 font-bold uppercase tracking-wider">REGISTERED</span>
+                      )}
+                      {p.total_visits > 1 && (
+                        <span className="bg-yellow-900/30 text-yellow-400 text-[10px] px-2 py-0.5 rounded border border-yellow-800 font-bold tracking-wider">
+                          REVISIT ({p.total_visits})
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="py-3 text-right pr-2">
                     <div className="text-sm text-gray-300 flex flex-col items-end">

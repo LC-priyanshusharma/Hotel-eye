@@ -17,8 +17,8 @@ const navItems = [
   { icon: Flame, label: 'Fire Detection', path: '/fire' },
   { icon: Car, label: 'ANPR Analytics', path: '/anpr' },
   { icon: UserCheck, label: 'Visitor Logs', path: '/visitor' },
-  { icon: UserPlus, label: 'Visitor DB', path: '/visitor-db' },
-  { icon: Users, label: 'Employee DB', path: '/employee-db' },
+  { icon: UserPlus, label: 'Visitor', path: '/visitor-db' },
+  { icon: Users, label: 'Employee', path: '/employee-db' },
   { icon: Database, label: 'Storage', path: '/storage' },
   { icon: Server, label: 'AI Models', path: '/ai-models' },
 ]

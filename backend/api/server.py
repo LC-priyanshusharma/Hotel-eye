@@ -17,7 +17,6 @@ from voice.api.routes import voice_router
 
 # Import our new focused routers
 from api.routers.cameras import router as cameras_router
-from api.routers.streaming import router as streaming_router
 from api.routers.websockets import router as websockets_router
 from api.routers.system import router as system_router
 
@@ -84,7 +83,6 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # Core system routes
 app.include_router(system_router)
 app.include_router(cameras_router)
-app.include_router(streaming_router)
 app.include_router(websockets_router)
 
 # Auth and config routes

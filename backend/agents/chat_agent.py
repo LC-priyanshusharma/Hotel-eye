@@ -11,11 +11,13 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 
 from database.session import SessionLocal
 from config.config import AppConfig
+from langchain_core.tools import tool
 
 settings = AppConfig()
 
 # 2. Define Tools
-def query_database(query: str, parameters: Dict[str, Any] = None) -> str:
+@tool
+def query_database(query: str) -> str:
     """
     Executes a SQL query against the SQLite/PostgreSQL database to retrieve CCTV events.
     Use this to answer user questions about what happened.
@@ -24,9 +26,6 @@ def query_database(query: str, parameters: Dict[str, Any] = None) -> str:
     The 'events' column contains dynamic JSON depending on the plugin.
     Example query: SELECT events FROM camera_events ORDER BY timestamp DESC LIMIT 10
     """
-    if parameters is None:
-        parameters = {}
-        
     # SECURITY: Only allow SELECT queries to prevent destructive operations
     query_upper = query.strip().upper()
     if not query_upper.startswith("SELECT"):
@@ -34,7 +33,7 @@ def query_database(query: str, parameters: Dict[str, Any] = None) -> str:
         
     try:
         with SessionLocal() as db:
-            result = db.execute(text(query), parameters)
+            result = db.execute(text(query))
             # Fetch up to 10 rows to avoid blowing up Groq's strict 8000 TPM limit on free tiers
             rows = result.fetchmany(10)
             
@@ -55,7 +54,8 @@ def query_database(query: str, parameters: Dict[str, Any] = None) -> str:
         logger.error(f"Execution Failed: {e}")
         return f"Error executing query: {str(e)}"
 
-def check_live_camera_status(camera_id: Union[str, int] = "all") -> str:
+@tool
+def check_live_camera_status(camera_id: str = "all") -> str:
     """
     Checks the real-time live telemetry of the cameras, including person count.
     Use this to answer questions about 'how many people are present in live webcam' or 'what is happening now'.
@@ -85,6 +85,34 @@ def check_live_camera_status(camera_id: Union[str, int] = "all") -> str:
     except Exception as e:
         return f"Error connecting to live server: {str(e)}"
 
+@tool
+def track_visitor_path(name: str) -> str:
+    """
+    Tracks a specific person/visitor's path throughout the day across all cameras.
+    Use this when the user asks where a person has been or which cameras they appeared on.
+    """
+    from app.plugins.visitor.models import Visitor, Visit
+    try:
+        with SessionLocal() as db:
+            visitors = db.query(Visitor).filter(Visitor.name.ilike(f"%{name}%")).all()
+            if not visitors:
+                return f"No visitor or employee found matching the name '{name}'."
+            
+            output = []
+            for visitor in visitors:
+                output.append(f"Tracking history for {visitor.role} '{visitor.name}' (ID: {visitor.visitor_id}):")
+                visits = db.query(Visit).filter(Visit.visitor_id == visitor.visitor_id).order_by(Visit.entry_time.asc()).all()
+                if not visits:
+                    output.append("  - No camera appearances recorded yet.")
+                else:
+                    for v in visits:
+                        time_str = v.entry_time.strftime("%I:%M %p")
+                        output.append(f"  - Present in camera '{v.camera_id}' at {time_str}")
+            return "\n".join(output)
+    except Exception as e:
+        logger.error(f"Error tracking visitor: {e}")
+        return f"Database error while tracking visitor: {str(e)}"
+
 # 3. Setup LangGraph Workflow
 class LogicEyeAgent:
     def __init__(self):
@@ -108,7 +136,7 @@ class LogicEyeAgent:
             self.llm = None
             logger.error("GROQ_API_KEY is not set. Chat Agent will not work.")
             
-        self.tools = [query_database, check_live_camera_status]
+        self.tools = [query_database, check_live_camera_status, track_visitor_path]
         
         if self.llm:
             self.llm_with_tools = self.llm.bind_tools(self.tools)
@@ -153,11 +181,18 @@ class LogicEyeAgent:
         # Inject system prompt dynamically
         if len(messages) > 0 and not isinstance(messages[0], SystemMessage):
             system_prompt = f"""
-            You are LogicEye AI, an intelligent assistant for a CCTV surveillance system.
+            You are Logic Clutch CCTV AI, an intelligent assistant for a CCTV surveillance system. 
+            When a user greets you (e.g., "hello", "hi", "hlo"), always reply with a warm greeting on behalf of Logic Clutch CCTV, and DO NOT invoke any tools.
             You can query the PostgreSQL (TimescaleDB) database for historical camera events, intrusions, fires, and attendance.
             Current time is {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}.
-            Always be concise and helpful. When querying JSONB columns, use standard PostgreSQL JSONB extraction (e.g. jsonb_array_length(events->'IntrusionDetectionPlugin') instead of json_array_length).
+            Always be concise and helpful. When querying JSONB columns, use standard PostgreSQL JSONB extraction.
             If asked about the current or live status (like how many people are present right now), ALWAYS use the check_live_camera_status tool.
+            If asked about a specific person or visitor's whereabouts, trajectory, or which cameras they appeared on, ALWAYS use the track_visitor_path tool.
+            
+            CRITICAL INSTRUCTIONS FOR TOOL CALLING:
+            1. ONLY use the tools explicitly provided to you (query_database, check_live_camera_status, track_visitor_path).
+            2. NEVER hallucinate tools (e.g., do not invent tools like brave_search).
+            3. NEVER use XML-style function calls like <function=name>. Use the native JSON tool calling format exclusively.
             """
             messages = [SystemMessage(content=system_prompt)] + messages
             
@@ -174,11 +209,15 @@ class LogicEyeAgent:
             if tool_call["name"] == "query_database":
                 # Execute the tool
                 query = tool_call["args"].get("query", "")
-                result = query_database(query)
+                result = query_database.invoke({"query": query})
                 tool_responses.append(ToolMessage(content=result, tool_call_id=tool_call["id"]))
             elif tool_call["name"] == "check_live_camera_status":
                 cam_id = tool_call["args"].get("camera_id", "all")
-                result = check_live_camera_status(cam_id)
+                result = check_live_camera_status.invoke({"camera_id": cam_id})
+                tool_responses.append(ToolMessage(content=result, tool_call_id=tool_call["id"]))
+            elif tool_call["name"] == "track_visitor_path":
+                name = tool_call["args"].get("name", "")
+                result = track_visitor_path.invoke({"name": name})
                 tool_responses.append(ToolMessage(content=result, tool_call_id=tool_call["id"]))
                 
         return {"messages": tool_responses}

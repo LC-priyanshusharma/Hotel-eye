@@ -226,6 +226,9 @@ function DatabaseIcon(props: any) {
 
 export function Events({ filter = 'All Events' }: { filter?: string }) {
   const [events, setEvents] = useState<any[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
 
   useEffect(() => {
     const fetchEvents = async () => {
@@ -254,6 +257,28 @@ export function Events({ filter = 'All Events' }: { filter?: string }) {
     return () => clearInterval(int)
   }, [filter])
 
+  const displayEvents = events.filter((ev) => {
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase()
+      const match = 
+        (ev.description?.toLowerCase() || '').includes(q) ||
+        (ev.camera_id?.toLowerCase() || '').includes(q) ||
+        (ev.type?.toLowerCase() || '').includes(q)
+      if (!match) return false
+    }
+
+    if (startDate || endDate) {
+      const evDate = new Date(ev.timestamp)
+      if (startDate && evDate < new Date(startDate)) return false
+      if (endDate) {
+        const end = new Date(endDate)
+        end.setHours(23, 59, 59, 999)
+        if (evDate > end) return false
+      }
+    }
+    return true
+  })
+
   return (
     <div className="pt-4 h-full">
       <div className="flex justify-between items-end mb-4">
@@ -267,12 +292,32 @@ export function Events({ filter = 'All Events' }: { filter?: string }) {
             <input 
               type="text" 
               placeholder="Search events..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-muted/50 border border-foreground/10 rounded-lg py-2 pl-9 pr-4 text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:bg-background transition-all text-white placeholder-white/30"
             />
           </div>
-          <button className="flex items-center gap-2 px-4 py-2 bg-muted rounded-lg text-sm font-medium hover:bg-muted/80 transition-colors text-white">
-            <Filter className="w-4 h-4" /> Filters
-          </button>
+          <div className="flex items-center gap-2 bg-muted/50 px-3 py-1.5 rounded-lg border border-foreground/10">
+            <Filter className="w-4 h-4 text-muted-foreground" />
+            <input 
+              type="date" 
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="bg-transparent border-none text-sm text-gray-300 focus:outline-none focus:ring-0 w-[110px] [color-scheme:dark]"
+            />
+            <span className="text-muted-foreground text-sm">to</span>
+            <input 
+              type="date" 
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="bg-transparent border-none text-sm text-gray-300 focus:outline-none focus:ring-0 w-[110px] [color-scheme:dark]"
+            />
+            {(startDate || endDate) && (
+              <button onClick={() => {setStartDate(''); setEndDate('')}} className="text-xs bg-foreground/10 hover:bg-foreground/20 px-2 py-1 rounded text-white transition ml-1">
+                Clear
+              </button>
+            )}
+          </div>
         </div>
       </div>
       
@@ -310,7 +355,7 @@ export function Events({ filter = 'All Events' }: { filter?: string }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
-            {events.map((ev, i) => (
+            {displayEvents.map((ev, i) => (
               <tr key={ev.id || i} className="hover:bg-foreground/5 transition-colors group">
                 <td className="px-6 py-4">
                   {ev.snapshot_file ? (

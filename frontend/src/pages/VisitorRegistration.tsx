@@ -100,8 +100,8 @@ export const VisitorRegistration = () => {
 
       <div className="p-8 z-10 flex-1 flex flex-col">
         <div className="flex flex-col items-center mb-8 text-center">
-          <img src="/lc_logo.png" alt="LC Logo" className="w-20 h-auto mb-4 rounded-xl shadow-lg" />
-          <h1 className="text-3xl font-extrabold mb-2 tracking-tight">Welcome to Logic Clutch</h1>
+          <img src="/murec_logo.png" alt="MUREC Logo" className="w-auto h-20 mb-4 rounded-xl shadow-lg" />
+          <h1 className="text-3xl font-extrabold mb-2 tracking-widest uppercase">Welcome to MUREC</h1>
           <p className="text-zinc-400 font-medium">
             {role === 'EMPLOYEE' ? 'Employee Self-Registration' : 'Visitor Self-Registration'}
           </p>

@@ -1,0 +1,15 @@
+# MediaMTX Configuration
+# This handles RTSP ingestion and WebRTC streaming for the dashboard.
+api: yes
+apiAddress: :9997
+
+webrtc: yes
+webrtcAddress: :8189
+webrtcLocalUDPAddress: :8189
+webrtcAdditionalHosts: [127.0.0.1]
+# Use WebRTC to stream directly to dashboard
+
+paths:
+  all_others:
+    # Disable authentication for development WebRTC proxying
+    runOnInit: ""

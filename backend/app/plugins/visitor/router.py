@@ -113,7 +113,7 @@ def register_visitor(request: VisitorRegisterRequest, db: Session = Depends(get_
     db.refresh(new_visitor)
     
     # Emit WebSocket Event so the Dashboard updates in real time!
-    from api.server import LATEST_DATA, DATA_LOCK
+    from core.state import LATEST_DATA, DATA_LOCK
     with DATA_LOCK:
         if "SYSTEM" not in LATEST_DATA:
             LATEST_DATA["SYSTEM"] = {"timestamp": time.time(), "events": {}, "fps": 0}
@@ -176,7 +176,7 @@ def bulk_delete_visitors(request: BulkDeleteRequest, db: Session = Depends(get_d
 def get_visitors(db: Session = Depends(get_db), limit: int = 50, page: int = 1, role: str = None):
     offset = (page - 1) * limit
     
-    query = db.query(Visitor).filter(Visitor.status == "REGISTERED")
+    query = db.query(Visitor)
     if role:
         query = query.filter(Visitor.role == role.upper())
         

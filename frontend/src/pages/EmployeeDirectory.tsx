@@ -138,7 +138,7 @@ export default function EmployeeDirectory() {
     <div className="p-6 min-h-screen text-white relative z-10">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
         <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent drop-shadow-sm">
-          Employee Database
+          Employee Management
         </h1>
       </div>
       
@@ -208,7 +208,7 @@ export default function EmployeeDirectory() {
                   <td className="py-3 pl-2">
                     <div className="flex items-center gap-3">
                       {p.photo ? (
-                        <img src={`/api/${p.photo}`} alt={p.name} className="w-10 h-10 rounded-full object-cover border border-primary/30 group-hover:border-primary transition-colors shadow-sm" />
+                        <img src={`/${p.photo}`} alt={p.name} className="w-10 h-10 rounded-full object-cover border border-primary/30 group-hover:border-primary transition-colors shadow-sm" />
                       ) : (
                         <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center font-bold text-lg text-secondary-foreground border border-border group-hover:border-primary transition-colors">
                           {p.name.charAt(0)}

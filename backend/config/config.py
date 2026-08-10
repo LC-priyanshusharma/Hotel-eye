@@ -21,7 +21,7 @@ class AppConfig(BaseSettings):
     
     # AI Agent Settings
     GROQ_API_KEY: str = Field(default="")
-    GROQ_MODEL: str = Field(default="llama-3.3-70b-versatile") # Groq's fast and smart model instead of invalid qwen
+    GROQ_MODEL: str = Field(default="llama-3.1-8b-instant") # Groq's fast and smart model
     
     
     # Database Settings
@@ -49,6 +49,10 @@ class AppConfig(BaseSettings):
     FRAME_BUFFER_SIZE: int = Field(default=3)
     
     # AI Pipeline Settings
+    VIDEO_BACKEND: str = Field(
+        default="gstreamer",
+        description="Video ingestion backend (opencv, gstreamer)."
+    )
     FRAME_SKIP: int = Field(default=3)
     MODEL_PATH: str = Field(default="detection/yolo11n.pt")
     CONFIDENCE_THRESHOLD: float = Field(default=0.4)

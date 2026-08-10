@@ -40,10 +40,10 @@ export function TopNav() {
           className="flex items-center gap-3 cursor-pointer group"
         >
           <div className="relative flex items-center justify-center">
-             <img src="/lc_logo.png" alt="LC Logo" className="w-8 h-8 rounded relative z-10" />
+             <img src="/murec_logo.png" alt="MUREC Logo" className="w-auto h-8 rounded relative z-10" />
           </div>
-          <span className="font-bold text-lg tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">
-            Logic Clutch
+          <span className="font-bold text-lg tracking-widest uppercase bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">
+            MUREC
           </span>
         </motion.div>
         

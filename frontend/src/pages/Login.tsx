@@ -48,8 +48,8 @@ export const Login: React.FC = () => {
       <div className="w-full max-w-md relative z-10">
         <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-3xl p-8 shadow-2xl">
           <div className="flex flex-col items-center mb-8">
-            <img src="/lc_logo.png" alt="LC Logic Clutch" className="w-24 h-auto mb-4 rounded-xl shadow-lg" />
-            <h1 className="text-3xl font-bold text-white tracking-tight">Logic Clutch</h1>
+            <img src="/murec_logo.png" alt="MUREC" className="w-auto h-24 mb-4 rounded-xl shadow-lg" />
+            <h1 className="text-3xl font-bold text-white tracking-widest uppercase">MUREC</h1>
             <p className="text-slate-400 mt-2 text-center text-sm">Enterprise AI Surveillance Platform</p>
           </div>
 

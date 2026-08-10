@@ -15,6 +15,16 @@ services:
     ports:
       - "6379:6379"
 
+  mediamtx:
+    image: bluenviron/mediamtx:latest-ffmpeg
+    ports:
+      - "8554:8554"
+      - "8189:8189/tcp"
+      - "8189:8189/udp"
+      - "9997:9997"
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml
+
   backend:
     build:
       context: ./backend
