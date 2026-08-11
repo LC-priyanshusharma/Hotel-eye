@@ -1,112 +1,193 @@
-import json
-import redis
-from typing import Dict, List, Optional
+import queue
+from typing import Dict, List, Optional, Any
 from loguru import logger
 
 from config.config import config
+from camera.stream_reader import StreamReader
+from camera.source import RTSPSource, FileSource, WebcamSource
+from core.pipeline import InferenceWorker
+from tracking.gesture import GestureWorker
+from face.worker import FaceWorker
 
 class CameraManager:
     """
     Singleton Manager for dynamically controlling camera pipelines.
-    Refactored for DeepStream: Instead of spawning local OpenCV threads,
-    this manager publishes Redis messages to the deepstream-worker container.
+    Follows ECC Principles: Modular, decoupled, handles camera failures independently.
     """
     def __init__(self):
-        self.redis_client = redis.Redis.from_url(config.REDIS_URL)
+        # Global Event Result Queue shared across all workers
+        self.result_queue = queue.Queue(maxsize=100)
         
-        # Track running cameras (just metadata now, no local threads)
-        self.running_cameras: Dict[str, dict] = {}
+        # Global FaceWorker instance (can process multiple cameras)
+        self.face_worker = FaceWorker()
+        
+        # Track running workers per camera
+        self.readers: Dict[str, StreamReader] = {}
+        self.workers: Dict[str, InferenceWorker] = {}
+        self.gesture_workers: Dict[str, GestureWorker] = {}
         
     def start_global_workers(self):
-        pass
+        """Starts background workers that operate across all cameras."""
+        if not self.face_worker.is_running:
+            self.face_worker.start()
 
     def stop_global_workers(self):
-        pass
+        """Stops background workers that operate across all cameras."""
+        if self.face_worker.is_running:
+            self.face_worker.stop()
 
     def start_camera_pipeline(self, camera_id: str, source_type: str = "rtsp", source_path: str = None):
         """Initializes and starts the pipeline for a single camera dynamically."""
-        if camera_id in self.running_cameras:
-            logger.warning(f"Camera {camera_id} is already running in DeepStream!")
+        if camera_id in self.workers:
+            logger.warning(f"Camera {camera_id} is already running!")
             return
             
-        logger.info(f"Commanding DeepStream to start camera: {camera_id}")
+        logger.info(f"Setting up pipeline for camera: {camera_id} (Type: {source_type})")
         
+        # Fallback to id as path if source_path is missing (legacy)
         actual_path = source_path if source_path else camera_id
         
-        # Auto-detect file sources
+        # Auto-detect file sources to prevent RTSP fallback for local videos
         if str(actual_path).lower().endswith(('.mp4', '.avi', '.mov', '.mkv')):
-            actual_path = f"file://{actual_path}"
-            
-        self.running_cameras[camera_id] = {"url": actual_path}
+            source_type = "file"
         
-        # Register the stream with MediaMTX so frontend can proxy via WebRTC
-        try:
-            import requests
-            import re
-            # Clean camera ID to match frontend's encodeURIComponent(cameraId.replace(/[^a-zA-Z0-9_-]/g, ''))
-            clean_camera_id = re.sub(r'[^a-zA-Z0-9_-]', '', camera_id)
-            mtx_url = f"http://mediamtx:9997/v3/config/paths/add/{clean_camera_id}"
-            requests.post(mtx_url, json={
-                "source": actual_path,
-                "sourceOnDemand": True
-            }, timeout=2)
-            logger.info(f"Registered {clean_camera_id} with MediaMTX.")
-        except Exception as e:
-            logger.error(f"Failed to register camera {camera_id} with MediaMTX: {e}")
-        
-        # Publish to DeepStream manager
-        self.redis_client.publish("logiceye:commands", json.dumps({
-            "command": "start_camera",
-            "camera_id": camera_id,
-            "url": actual_path
-        }))
+        if source_type == "webcam":
+            video_source = WebcamSource(actual_path)
+        elif source_type in ["video_file", "file"]:
+            video_source = FileSource(actual_path, loop=True)
+        else:
+            video_source = RTSPSource(actual_path)
             
-        logger.info(f"Successfully sent start command for {camera_id}")
+        stream_reader = StreamReader(video_source, camera_id=camera_id, buffer_size=config.FRAME_BUFFER_SIZE)
+        
+        observers = []
+        
+        gesture_worker = None
+        if config.GESTURE_ENABLED:
+            gesture_queue = queue.Queue(maxsize=10)
+            gesture_worker = GestureWorker(
+                camera_id=camera_id,
+                input_queue=gesture_queue,
+                result_queue=self.result_queue
+            )
+            gesture_worker.start()
+            observers.append(gesture_worker)
+            self.gesture_workers[camera_id] = gesture_worker
+
+        observers.append(self.face_worker)
+
+        inference_worker = InferenceWorker(
+            camera_id=camera_id,
+            input_queue=stream_reader.frame_buffer, 
+            output_queue=self.result_queue,
+            observers=observers,
+            face_data_provider=self.face_worker,
+            camera_url=source_path
+        )
+        
+        # Start threads safely
+        stream_reader.start()
+        inference_worker.start()
+        
+        # Register in tracking dictionaries
+        self.readers[camera_id] = stream_reader
+        self.workers[camera_id] = inference_worker
+            
+        logger.info(f"Successfully started pipeline for {camera_id}")
 
     def stop_camera_pipeline(self, camera_id: str):
-        """Stops and cleans up the pipeline for a single camera."""
-        if camera_id in self.running_cameras:
-            del self.running_cameras[camera_id]
+        """Stops and cleans up the pipeline for a single camera. 
+        Stops components in parallel for minimal latency."""
+        
+        import threading
+        stop_threads = []
+        
+        def _stop_component(comp):
+            if comp:
+                comp.stop()
+
+        # 1. Stop inference worker
+        if camera_id in self.workers:
+            t = threading.Thread(target=_stop_component, args=(self.workers[camera_id],))
+            t.start()
+            stop_threads.append(t)
+            del self.workers[camera_id]
+        
+        # 2. Stop gesture worker
+        if camera_id in self.gesture_workers:
+            t = threading.Thread(target=_stop_component, args=(self.gesture_workers[camera_id],))
+            t.start()
+            stop_threads.append(t)
+            del self.gesture_workers[camera_id]
             
-            # Remove stream from MediaMTX
-            try:
-                import requests
-                import re
-                clean_camera_id = re.sub(r'[^a-zA-Z0-9_-]', '', camera_id)
-                mtx_url = f"http://mediamtx:9997/v3/config/paths/remove/{clean_camera_id}"
-                requests.post(mtx_url, timeout=2)
-                logger.info(f"Removed {clean_camera_id} from MediaMTX.")
-            except Exception as e:
-                logger.error(f"Failed to remove camera {camera_id} from MediaMTX: {e}")
+        # 3. Stop stream reader
+        if camera_id in self.readers:
+            # Drain the frame buffer to free memory and unblock threads
+            buf = self.readers[camera_id].frame_buffer
+            while not buf.empty():
+                try:
+                    buf.get_nowait()
+                except queue.Empty:
+                    break
+                except Exception as e:
+                    logger.debug(f"Error draining buffer for {camera_id}: {e}")
+                    break
+            t = threading.Thread(target=_stop_component, args=(self.readers[camera_id],))
+            t.start()
+            stop_threads.append(t)
+            del self.readers[camera_id]
+            
+        # Wait for all stops to complete asynchronously to avoid blocking the API
+        def _wait_and_clear():
+            for t in stop_threads:
+                t.join(timeout=2.0)
+            
+            # 4. Clear stale face recognition data for this camera
+            if hasattr(self.face_worker, 'latest_results'):
+                with self.face_worker.results_lock:
+                    self.face_worker.latest_results.pop(camera_id, None)
                 
-            self.redis_client.publish("logiceye:commands", json.dumps({
-                "command": "stop_camera",
-                "camera_id": camera_id
-            }))
-            
-            # Clear global state
+            # 5. Clear global state
             from core.state import LATEST_DATA, DATA_LOCK
             with DATA_LOCK:
                 if camera_id in LATEST_DATA:
                     del LATEST_DATA[camera_id]
-                    
-            logger.info(f"Sent stop command for {camera_id} to DeepStream.")
+                
+            logger.info(f"Pipeline for {camera_id} fully stopped and resources released.")
+            
+        threading.Thread(target=_wait_and_clear, daemon=True, name=f"StopCam-{camera_id}").start()
         
     def restart_camera_pipeline(self, camera_id: str, source_type: str = "rtsp", source_path: str = None):
+        """Hot switches a camera's source by restarting ONLY its reader thread."""
+        logger.info(f"Restarting pipeline for {camera_id}...")
         self.stop_camera_pipeline(camera_id)
         self.start_camera_pipeline(camera_id, source_type, source_path)
 
     def get_status(self) -> Dict[str, str]:
         """Returns the connection status of all managed cameras."""
-        return {cam_id: "Connected (DeepStream)" for cam_id in self.running_cameras.keys()}
+        status = {}
+        for url, reader in self.readers.items():
+            if reader.is_running and getattr(reader, 'source', None) and reader.source.is_opened():
+                status[url] = "Connected"
+            elif reader.is_running:
+                status[url] = "Connecting/Offline"
+            else:
+                status[url] = "Stopped"
+        return status
 
     def evaluate_auto_suspend(self, camera_id: str, source_type: str = "rtsp", source_path: str = None):
+        """
+        Evaluates whether a camera should be auto-suspended or resumed based on active plugins.
+        If a camera has 0 plugins enabled, it is automatically stopped to save resources.
+        If a camera has >= 1 plugins enabled, it is automatically started.
+        """
         plugins = getattr(config, 'CAMERA_PLUGINS', {})
         active_plugins = plugins.get(camera_id, [])
         has_plugin = len(active_plugins) > 0
                 
-        is_running = camera_id in self.running_cameras
+        is_running = camera_id in self.readers
         if has_plugin and not is_running:
+            # Fallback to existing url if not provided
             if not source_path:
                 from database.session import SessionLocal
                 from database.repositories.camera_repository import CameraRepository
@@ -128,10 +209,12 @@ class CameraManager:
             self.stop_camera_pipeline(camera_id)
 
     def stop_all(self):
-        logger.info("Stopping all camera pipelines in DeepStream...")
-        for cam_id in list(self.running_cameras.keys()):
-            self.stop_camera_pipeline(cam_id)
+        """Stops all running cameras and global workers."""
+        logger.info("Stopping all camera pipelines...")
+        for url in list(self.workers.keys()):
+            self.stop_camera_pipeline(url)
+            
+        self.stop_global_workers()
 
 # Instantiate the Singleton instance
 camera_manager = CameraManager()
-
