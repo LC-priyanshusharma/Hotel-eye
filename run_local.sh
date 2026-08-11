@@ -14,13 +14,13 @@ fi
 
 # 2. Cleanup old instances
 echo "Stopping any existing containers..."
-docker compose down
+docker-compose down
 [ -f .tunnel.pid ] && kill -9 $(cat .tunnel.pid) 2>/dev/null
 rm -f .tunnel.pid tunnel.log
 
 # 3. Start the fully Dockerized Jetson Stack
 echo "Building and starting all containers (DeepStream, Backend, Frontend, DBs)..."
-docker compose up -d --build
+docker-compose up -d --build
 
 # 4. Wait for Frontend Nginx to be ready
 echo "Waiting for Frontend to come online..."
@@ -58,6 +58,6 @@ fi
 echo "==============================================="
 echo " ✅ SYSTEM IS FULLY RUNNING! "
 echo " 🌐 Access locally at: http://localhost"
-echo " 🔍 To view logs: docker compose logs -f"
-echo " 🛑 To gracefully shut down, run: docker compose down && kill -9 \$(cat .tunnel.pid)"
+echo " 🔍 To view logs: docker-compose logs -f"
+echo " 🛑 To gracefully shut down, run: docker-compose down && kill -9 \$(cat .tunnel.pid)"
 echo "==============================================="
