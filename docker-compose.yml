@@ -33,7 +33,11 @@ services:
     volumes:
       - ./deepstream:/app/deepstream
     working_dir: /app/deepstream
-    command: python3 pipeline.py
+    command: >
+      bash -c "cd /opt/nvidia/deepstream/deepstream-6.0/sources/objectDetector_Yolo/nvdsinfer_custom_impl_Yolo && 
+      CUDA_VER=10.2 make && 
+      cp libnvdsinfer_custom_impl_Yolo.so /opt/nvidia/deepstream/deepstream-6.0/lib/ && 
+      cd /app/deepstream && python3 pipeline.py"
     depends_on:
       - redis
 
