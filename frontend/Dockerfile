@@ -14,6 +14,9 @@ RUN npm run build
 # Serve stage using NGINX
 FROM nginx:alpine
 
+# Copy custom NGINX configuration for React Router
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
 # Copy built assets to NGINX serve directory
 COPY --from=builder /app/dist /usr/share/nginx/html
 
