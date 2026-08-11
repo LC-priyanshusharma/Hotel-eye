@@ -1,0 +1,17 @@
+FROM nvcr.io/nvidia/l4t-pytorch:r32.7.1-pth1.10-py3
+
+WORKDIR /app
+
+# Remove kitware to fix apt-get on Jetson
+RUN sed -i '/kitware/d' /etc/apt/sources.list && \
+    apt-get update
+
+# Install python dependencies for inference (redis, ultralytics)
+COPY backend/requirements-inference.txt .
+RUN pip3 install -r requirements-inference.txt
+
+# Copy the inference service and the models
+COPY backend /app/backend
+
+# Run the inference service
+CMD ["python3", "backend/inference_service.py"]

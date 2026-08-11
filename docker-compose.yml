@@ -25,6 +25,20 @@ services:
     volumes:
       - ./mediamtx.yml:/mediamtx.yml
 
+  deepstream:
+    build: ./deepstream
+    runtime: nvidia
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DISPLAY=$DISPLAY
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - ./deepstream:/app/deepstream
+    working_dir: /app/deepstream
+    command: python3 pipeline.py
+    depends_on:
+      - redis
+
   backend:
     build:
       context: ./backend

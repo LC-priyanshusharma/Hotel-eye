@@ -27,7 +27,10 @@ ts_replacements = {
     r"lib/utils": "utils/utils",
 }
 
-for root, _, files in os.walk(backend_dir):
+for root, dirs, files in os.walk(backend_dir):
+    if '__pycache__' in dirs: dirs.remove('__pycache__')
+    if 'venv' in dirs: dirs.remove('venv')
+    if '.venv' in dirs: dirs.remove('.venv')
     for f in files:
         if f.endswith(".py"):
             path = os.path.join(root, f)
@@ -41,7 +44,9 @@ for root, _, files in os.walk(backend_dir):
                     file.write(content)
                 print(f"Updated {path}")
 
-for root, _, files in os.walk(frontend_dir):
+for root, dirs, files in os.walk(frontend_dir):
+    if 'node_modules' in dirs:
+        dirs.remove('node_modules')
     for f in files:
         if f.endswith((".ts", ".tsx", ".js", ".jsx")):
             path = os.path.join(root, f)

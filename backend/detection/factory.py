@@ -1,10 +1,8 @@
 import threading
 from loguru import logger
 from detection.interfaces.inference import IInferenceEngine
-from detection.strategies.openvino import OpenVINOStrategy
-from detection.strategies.coreml import CoreMLStrategy
-from detection.strategies.onnx import ONNXStrategy
-from detection.strategies.tensorrt import TensorRTStrategy
+
+from detection.strategies.redis_infer import RedisInferenceStrategy
 
 class InferenceFactory:
     """
@@ -22,25 +20,10 @@ class InferenceFactory:
         
         with cls._lock:
             if cache_key in cls._cache:
-                logger.debug(f"Using cached Inference Engine: {backend} for {model_path}")
                 return cls._cache[cache_key]
                 
-            logger.info(f"Instantiating new Inference Engine: {backend}")
-            
-            if backend == "openvino":
-                instance = OpenVINOStrategy(model_path, conf, classes)
-            elif backend == "coreml":
-                try:
-                    instance = CoreMLStrategy(model_path, conf, classes)
-                except Exception as e:
-                    logger.warning(f"Failed to initialize CoreML ({e}). Falling back to ONNX CPU provider.")
-                    instance = ONNXStrategy(model_path, conf, classes)
-            elif backend == "onnx":
-                instance = ONNXStrategy(model_path, conf, classes)
-            elif backend == "tensorrt":
-                instance = TensorRTStrategy(model_path, conf, classes)
-            else:
-                raise ValueError(f"Unsupported inference backend: {backend_name}. Valid options: openvino, coreml, onnx, tensorrt")
+            logger.info(f"Instantiating Redis Inference Engine RPC Client: {backend}")
+            instance = RedisInferenceStrategy(model_path, conf, classes)
                 
             cls._cache[cache_key] = instance
             return instance

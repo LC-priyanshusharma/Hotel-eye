@@ -37,72 +37,67 @@ class PeopleCountingPlugin(BaseDetectionPlugin):
         line_x_end = getattr(config, 'LINE_CROSSING_X_END', 1150)
         direction = getattr(config, 'LINE_CROSSING_DIRECTION', 'down')
         
-        if frame_data.detections is not None and getattr(frame_data.detections, 'boxes', None) is not None:
-            # Detections exist. We can safely count people.
-            cls_ids = frame_data.detections.boxes.cls.cpu().numpy()
-            xyxys = frame_data.detections.boxes.xyxy.cpu().numpy()
+        for det in frame_data.detections:
+            cls_id = det.class_id
+            track_id = det.track_id
+            xyxy = det.bbox
             
-            # Tracking IDs might be None if the tracker was bypassed or if no tracks are active
-            has_tracks = getattr(frame_data.detections.boxes, 'id', None) is not None
-            track_ids = frame_data.detections.boxes.id.cpu().numpy() if has_tracks else [None] * len(cls_ids)
-            
-            for cls_id, track_id, xyxy in zip(cls_ids, track_ids, xyxys):
-                if int(cls_id) == 0:
-                    current_count += 1
+            if int(cls_id) == 0:
+                current_count += 1
+                
+                # Only do line crossing and unique ID logic if we have a valid track_id
+                if track_id is not None:
+                    tid = int(track_id)
+                    unique_ids.add(tid)
                     
-                    # Only do line crossing and unique ID logic if we have a valid track_id
-                    if track_id is not None:
-                        tid = int(track_id)
-                        unique_ids.add(tid)
+                    # Calculate center Y
+                    x1, y1, x2, y2 = xyxy
+                    cy = (y1 + y2) / 2
+                    
+                    if tid not in track_history:
+                        track_history[tid] = []
+                    track_history[tid].append(cy)
+                    
+                    # Keep history small
+                    if len(track_history[tid]) > 10:
+                        track_history[tid].pop(0)
                         
-                        # Calculate center Y
-                        x1, y1, x2, y2 = xyxy
-                        cy = (y1 + y2) / 2
+                    # Check line crossing
+                    if len(track_history[tid]) >= 2:
+                        prev_y = track_history[tid][-2]
+                        curr_y = track_history[tid][-1]
                         
-                        if tid not in track_history:
-                            track_history[tid] = []
-                        track_history[tid].append(cy)
+                        # Only trigger if the person's center X is within the door boundaries
+                        cx = (x1 + x2) / 2
+                        is_within_x_bounds = line_x_start <= cx <= line_x_end
                         
-                        # Keep history small
-                        if len(track_history[tid]) > 10:
-                            track_history[tid].pop(0)
+                        crossed_down = prev_y < line_y and curr_y >= line_y
+                        crossed_up = prev_y > line_y and curr_y <= line_y
+                        
+                        crossed = False
+                        if is_within_x_bounds:
+                            if direction == "down" and crossed_down:
+                                crossed = True
+                            elif direction == "up" and crossed_up:
+                                crossed = True
+                            elif direction == "both" and (crossed_down or crossed_up):
+                                crossed = True
                             
-                        # Check line crossing
-                        if len(track_history[tid]) >= 2:
-                            prev_y = track_history[tid][-2]
-                            curr_y = track_history[tid][-1]
+                        if crossed:
+                            track_history[tid] = [curr_y]
                             
-                            # Only trigger if the person's center X is within the door boundaries
-                            cx = (x1 + x2) / 2
-                            is_within_x_bounds = line_x_start <= cx <= line_x_end
-                            
-                            crossed_down = prev_y < line_y and curr_y >= line_y
-                            crossed_up = prev_y > line_y and curr_y <= line_y
-                            
-                            crossed = False
-                            if is_within_x_bounds:
-                                if direction == "down" and crossed_down:
-                                    crossed = True
-                                elif direction == "up" and crossed_up:
-                                    crossed = True
-                                elif direction == "both" and (crossed_down or crossed_up):
-                                    crossed = True
-                                
-                            if crossed:
-                                track_history[tid] = [curr_y]
-                                
-                                events.append(DetectionEvent(
-                                    plugin_name=self.plugin_name,
-                                    event_type="LINE_CROSSED",
-                                    camera_id=camera_id,
-                                    timestamp=timestamp,
-                                    confidence=1.0,
-                                    metadata={
-                                        "track_id": tid,
-                                        "line_y": line_y,
-                                        "direction_crossed": "down" if crossed_down else "up"
-                                    }
-                                ))
+                            events.append(DetectionEvent(
+                                plugin_name=self.plugin_name,
+                                event_type="LINE_CROSSED",
+                                camera_id=camera_id,
+                                timestamp=timestamp,
+                                confidence=1.0,
+                                metadata={
+                                    "track_id": tid,
+                                    "line_y": line_y,
+                                    "direction_crossed": "down" if crossed_down else "up"
+                                }
+                            ))
                             
         # Always emit a PERSON_COUNT event for live stats and draw the line
         events.append(DetectionEvent(

@@ -3,6 +3,7 @@ import { create } from 'zustand'
 interface CameraState {
   timestamp: number
   events: any
+  detections?: any[]
   fps: number
   latency_ms: number
 }

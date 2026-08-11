@@ -69,19 +69,22 @@ class ANPRPlugin(BaseDetectionPlugin):
         ))
         
         # 1. Iterate over vehicle detections provided by the core pipeline
-        if not hasattr(frame_data.detections, 'boxes') or getattr(frame_data.detections.boxes, 'id', None) is None:
+        if not frame_data.detections:
             # Cleanup Stale Tracks and Emit Final Events even if no detections this frame
             return self._cleanup_and_emit(camera_id, timestamp)
 
-        for box in frame_data.detections.boxes:
-            track_id = int(box.id[0].item())
-            class_id = int(box.cls[0].item())
+        for det in frame_data.detections:
+            if det.track_id is None:
+                continue
+                
+            track_id = det.track_id
+            class_id = det.class_id
             
             # 2 (car), 3 (motorcycle), 5 (bus), 7 (truck)
             if class_id not in [2, 3, 5, 7]:
                 continue
                 
-            vehicle_box = box.xyxy[0].cpu().numpy()
+            vehicle_box = det.bbox
             
             # Crop vehicle
             vx1, vy1, vx2, vy2 = map(int, vehicle_box)
@@ -173,7 +176,7 @@ class ANPRPlugin(BaseDetectionPlugin):
                         "drawings": [
                             {
                                 "type": "rect",
-                                "coords": vehicle_box.tolist(),
+                                "coords": vehicle_box,
                                 "color": [0, 255, 0],
                                 "thickness": 2
                             },

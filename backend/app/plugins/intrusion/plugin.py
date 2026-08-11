@@ -50,103 +50,99 @@ class IntrusionDetectionPlugin(BaseDetectionPlugin):
         
         current_frame_ids = set()
         
-        if frame_data.detections is not None and getattr(frame_data.detections, 'boxes', None) is not None and getattr(frame_data.detections.boxes, 'id', None) is not None:
-            boxes = frame_data.detections.boxes.xyxy.cpu().numpy()
-            cls_ids = frame_data.detections.boxes.cls.cpu().numpy()
-            track_ids = frame_data.detections.boxes.id.cpu().numpy()
+        for det in frame_data.detections:
+            if det.track_id is None:
+                continue
             
-            for box, cls_id, track_id in zip(boxes, cls_ids, track_ids):
-                if int(cls_id) != 0:
-                    continue
+            if det.class_id != 0:
+                continue
+                
+            track_id = det.track_id
+            current_frame_ids.add(track_id)
+            
+            x1, y1, x2, y2 = det.bbox
+            center_x = (x1 + x2) / 2
+            bottom_y = y2
+            feet_point = Point(center_x, bottom_y)
+            
+            if zone_poly.contains(feet_point):
+                # Intrusion Detected
+                if track_id not in self.known_intrusions[camera_id]:
+                    self.known_intrusions[camera_id].add(track_id)
                     
-                track_id = int(track_id)
-                current_frame_ids.add(track_id)
+                    drawings = []
+                    drawings.append({
+                        "type": "rect",
+                        "coords": [int(x1), int(y1), int(x2), int(y2)],
+                        "color": [0, 0, 255],
+                        "thickness": 3
+                    })
+                    drawings.append({
+                        "type": "text",
+                        "text": "INTRUDER",
+                        "coords": [int(x1), int(y1) - 10],
+                        "color": [0, 0, 255],
+                        "scale": 0.7
+                    })
+                    
+                    event = DetectionEvent(
+                        plugin_name=self.plugin_name,
+                        event_type="INTRUSION_DETECTED",
+                        camera_id=camera_id,
+                        timestamp=timestamp,
+                        confidence=1.0,
+                        snapshot_path=None,
+                        metadata={
+                            "track_id": track_id,
+                            "zone": zone_coords,
+                            "drawings": drawings
+                        }
+                    )
+                    events.append(event)
+                    logger.warning(f"🚨 INTRUSION DETECTED: Track {track_id} on {camera_id}")
                 
-                x1, y1, x2, y2 = box
-                center_x = (x1 + x2) / 2
-                bottom_y = y2
-                feet_point = Point(center_x, bottom_y)
-                
-                if zone_poly.contains(feet_point):
-                    # Intrusion Detected
-                    if track_id not in self.known_intrusions[camera_id]:
-                        self.known_intrusions[camera_id].add(track_id)
-                        
-
+                # Loitering logic
+                if track_id not in self.loitering_memory[camera_id]:
+                    self.loitering_memory[camera_id][track_id] = timestamp
+                else:
+                    time_spent = timestamp - self.loitering_memory[camera_id][track_id]
+                    if time_spent >= (self.config.LOITERING_THRESHOLD_SECONDS if self.config else 60):
+                        # Debounce loitering alerts (send once per configured threshold)
+                        # To do this simply, we can reset the timer when an alert is fired
+                        self.loitering_memory[camera_id][track_id] = timestamp
                         
                         drawings = []
                         drawings.append({
                             "type": "rect",
                             "coords": [int(x1), int(y1), int(x2), int(y2)],
-                            "color": [0, 0, 255],
+                            "color": [0, 165, 255], # Orange for loitering
                             "thickness": 3
                         })
                         drawings.append({
                             "type": "text",
-                            "text": "INTRUDER",
+                            "text": f"LOITERING ({int(time_spent)}s)",
                             "coords": [int(x1), int(y1) - 10],
-                            "color": [0, 0, 255],
+                            "color": [0, 165, 255],
                             "scale": 0.7
                         })
                         
-                        event = DetectionEvent(
+                        levent = DetectionEvent(
                             plugin_name=self.plugin_name,
-                            event_type="INTRUSION_DETECTED",
+                            event_type="LOITERING_DETECTED",
                             camera_id=camera_id,
                             timestamp=timestamp,
                             confidence=1.0,
-                            snapshot_path=None,
                             metadata={
                                 "track_id": track_id,
-                                "zone": zone_coords,
+                                "time_spent": time_spent,
                                 "drawings": drawings
                             }
                         )
-                        events.append(event)
-                        logger.warning(f"🚨 INTRUSION DETECTED: Track {track_id} on {camera_id}")
-                    
-                    # Loitering logic
-                    if track_id not in self.loitering_memory[camera_id]:
-                        self.loitering_memory[camera_id][track_id] = timestamp
-                    else:
-                        time_spent = timestamp - self.loitering_memory[camera_id][track_id]
-                        if time_spent >= (self.config.LOITERING_THRESHOLD_SECONDS if self.config else 60):
-                            # Debounce loitering alerts (send once per configured threshold)
-                            # To do this simply, we can reset the timer when an alert is fired
-                            self.loitering_memory[camera_id][track_id] = timestamp
-                            
-                            drawings = []
-                            drawings.append({
-                                "type": "rect",
-                                "coords": [int(x1), int(y1), int(x2), int(y2)],
-                                "color": [0, 165, 255], # Orange for loitering
-                                "thickness": 3
-                            })
-                            drawings.append({
-                                "type": "text",
-                                "text": f"LOITERING ({int(time_spent)}s)",
-                                "coords": [int(x1), int(y1) - 10],
-                                "color": [0, 165, 255],
-                                "scale": 0.7
-                            })
-                            
-                            levent = DetectionEvent(
-                                plugin_name=self.plugin_name,
-                                event_type="LOITERING_DETECTED",
-                                camera_id=camera_id,
-                                timestamp=timestamp,
-                                confidence=1.0,
-                                metadata={
-                                    "track_id": track_id,
-                                    "time_spent": time_spent,
-                                    "drawings": drawings
-                                }
-                            )
-                            events.append(levent)
-                            logger.warning(f"⚠️ LOITERING DETECTED: Track {track_id} on {camera_id} for {int(time_spent)}s")
-                else:
-                    if track_id in self.loitering_memory[camera_id]:
-                        del self.loitering_memory[camera_id][track_id]
+                        events.append(levent)
+                        logger.warning(f"⚠️ LOITERING DETECTED: Track {track_id} on {camera_id} for {int(time_spent)}s")
+            else:
+                if track_id in self.loitering_memory[camera_id]:
+                    del self.loitering_memory[camera_id][track_id]
                         
         # Cleanup
         memory = self.loitering_memory[camera_id]

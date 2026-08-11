@@ -1,0 +1,10 @@
+[sensor0]
+enable=1
+type=Camera
+id=camera1
+
+[place0]
+enable=1
+id=1
+type=building
+name=LogicEye Location

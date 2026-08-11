@@ -1,0 +1,23 @@
+graph TD
+    User([User/Web Browser])
+    Frontend[Frontend Container\nReact / Nginx]
+    Backend[Backend Container\nFastAPI Server]
+    MediaMTX[MediaMTX Container\nRTSP/WebRTC Server]
+    Inference[Inference Container\nPyTorch / TorchScript]
+    Redis[(Redis Pub/Sub\nMessage Broker)]
+    TimescaleDB[(TimescaleDB\nPostgreSQL 15)]
+    Cameras((IP Cameras\nRTSP Streams))
+
+    User <-->|HTTP/REST| Frontend
+    Frontend <-->|API Calls| Backend
+    Frontend <-->|WebRTC Stream| MediaMTX
+    
+    Cameras -->|RTSP Feed| MediaMTX
+    MediaMTX -->|RTSP Feed| Backend
+    
+    Backend -->|Push Image Frames| Redis
+    Redis -->|Consume Frames| Inference
+    Inference -->|Push Detections| Redis
+    Redis -->|Consume Detections| Backend
+    
+    Backend <-->|CRUD & Events| TimescaleDB

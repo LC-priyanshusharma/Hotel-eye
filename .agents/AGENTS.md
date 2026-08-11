@@ -130,3 +130,14 @@ Before writing any code, ask yourself:
 - Whenever the user refers to **"ECC"**, they are referring to the **"Everything Claude Code"** ecosystem located in the `/Users/ibm/Downloads/LogicEye-main/everything-claude-code/` directory.
 - **NEVER** confuse "ECC" with "Extreme Coding Constraints".
 - When asked to "use ECC", prioritize the agents, skills, hooks, and workflows defined in the `everything-claude-code` directory for the given task.
+
+## Remote SSH Environment Considerations
+
+The user is frequently connected to the Jetson Nano via a VS Code Remote SSH window. When providing links to files that exist on the Jetson Nano, do **NOT** use the IDE's artifact generator because it creates links that point to the local Mac file system (which will fail with a "file not found" error in the remote window).
+
+Instead, you MUST follow this exact format when providing links to files on the Jetson Nano:
+1. Copy or create the file on the remote Jetson Nano (e.g., at `/home/user/LogicEye-main/...`).
+2. Provide a direct, clickable markdown link in the chat using the absolute path on the remote machine.
+   Example: `[filename.md](file:///home/user/LogicEye-main/filename.md)`
+
+Always use this explicit link format so the user can open the files directly within their SSH remote session.

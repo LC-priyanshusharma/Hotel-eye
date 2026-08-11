@@ -59,11 +59,13 @@ class StreamRenderer:
             for hand in gesture_data.get("gesture_events", []):
                 landmarks = hand.get("landmarks", [])
                 if landmarks:
-                    import mediapipe as mp
-                    from mediapipe.framework.formats import landmark_pb2
-                    
-                    mp_drawing = mp.solutions.drawing_utils
-                    mp_hands = mp.solutions.hands
+                    try:
+                        import mediapipe as mp
+                        from mediapipe.framework.formats import landmark_pb2
+                        mp_drawing = mp.solutions.drawing_utils
+                        mp_hands = mp.solutions.hands
+                    except ImportError:
+                        continue
                     
                     hand_landmarks_proto = landmark_pb2.NormalizedLandmarkList()
                     hand_landmarks_proto.landmark.extend([

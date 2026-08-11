@@ -34,6 +34,7 @@ async def telemetry_broadcaster():
                             "fps": data.get("fps", 0),
                             "latency_ms": data.get("latency_ms", 0),
                             "events": data.get("events", {}),
+                            "detections": data.get("detections", []),
                         }
                         
                 safe_data = clean_numpy(clean_data)

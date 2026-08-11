@@ -68,123 +68,118 @@ class AttendanceDetectionPlugin(BaseDetectionPlugin):
             # so the UI can draw the turnstile line even if no people are present.
             tracker_context.get_state(self.plugin_name, camera_id)["checkin_line_drawn"] = True
             
-        if frame_data.detections is not None and getattr(frame_data.detections, 'boxes', None) is not None and getattr(frame_data.detections.boxes, 'id', None) is not None:
-            boxes = frame_data.detections.boxes.xyxy.cpu().numpy()
-            cls_ids = frame_data.detections.boxes.cls.cpu().numpy()
-            track_ids = frame_data.detections.boxes.id.cpu().numpy()
+        for det in frame_data.detections:
+            if det.track_id is None or det.class_id != 0:
+                continue
+                
+            x1, y1, x2, y2 = map(int, det.bbox)
+            h, w = frame.shape[:2]
+            x1, y1 = max(0, x1), max(0, y1)
+            x2, y2 = min(w, x2), min(h, y2)
             
-            for box, cls_id, track_id in zip(boxes, cls_ids, track_ids):
-                if int(cls_id) != 0:
-                    continue
+            if x2 - x1 < 10 or y2 - y1 < 10:
+                continue
+                
+            crop = frame[y1:y2, x1:x2]
+            sig = self.extract_signature(crop)
+            
+            # Match against known signatures
+            best_match_id = None
+            best_score = 0.0
+            
+            for k_id, k_sig in self.known_signatures.items():
+                score = cv2.compareHist(sig, k_sig, cv2.HISTCMP_CORREL)
+                if score > best_score:
+                    best_score = score
+                    best_match_id = k_id
                     
-                x1, y1, x2, y2 = map(int, box)
-                h, w = frame.shape[:2]
-                x1, y1 = max(0, x1), max(0, y1)
-                x2, y2 = min(w, x2), min(h, y2)
+            if best_match_id is None or best_score < 0.7:
+                # New person
+                best_match_id = self.next_id
+                self.known_signatures[best_match_id] = sig
+                self.next_id += 1
+            else:
+                # Update signature slowly
+                self.known_signatures[best_match_id] = 0.9 * self.known_signatures[best_match_id] + 0.1 * sig
                 
-                if x2 - x1 < 10 or y2 - y1 < 10:
-                    continue
+            # Mark as seen
+            self.last_seen[best_match_id] = time.time()
+                
+            if best_match_id in self.authorized_ids:
+                auth_in_frame.append(f"Employee {best_match_id}")
+                
+                center_x = (x1 + x2) / 2
+                center_y = (y1 + y2) / 2
+                current_centroid = (center_x, center_y)
+                
+                if line and best_match_id in self.previous_centroids:
+                    prev_centroid = self.previous_centroids[best_match_id]
+                    A, B = line
+                    C = prev_centroid
+                    D = current_centroid
                     
-                crop = frame[y1:y2, x1:x2]
-                sig = self.extract_signature(crop)
-                
-                # Match against known signatures
-                best_match_id = None
-                best_score = 0.0
-                
-                for k_id, k_sig in self.known_signatures.items():
-                    score = cv2.compareHist(sig, k_sig, cv2.HISTCMP_CORREL)
-                    if score > best_score:
-                        best_score = score
-                        best_match_id = k_id
+                    if self.intersect(A, B, C, D):
+                        AB_x = B[0] - A[0]
+                        AB_y = B[1] - A[1]
+                        CD_x = D[0] - C[0]
+                        CD_y = D[1] - C[1]
+                        cross = AB_x * CD_y - AB_y * CD_x
                         
-                if best_match_id is None or best_score < 0.7:
-                    # New person
-                    best_match_id = self.next_id
-                    self.known_signatures[best_match_id] = sig
-                    self.next_id += 1
-                else:
-                    # Update signature slowly
-                    self.known_signatures[best_match_id] = 0.9 * self.known_signatures[best_match_id] + 0.1 * sig
-                    
-                # Mark as seen
-                self.last_seen[best_match_id] = time.time()
-                    
-                if best_match_id in self.authorized_ids:
-                    auth_in_frame.append(f"Employee {best_match_id}")
-                    
-                    center_x = (x1 + x2) / 2
-                    center_y = (y1 + y2) / 2
-                    current_centroid = (center_x, center_y)
-                    
-                    if line and best_match_id in self.previous_centroids:
-                        prev_centroid = self.previous_centroids[best_match_id]
-                        A, B = line
-                        C = prev_centroid
-                        D = current_centroid
+                        action = None
+                        is_checkout_cam = "CHECK OUT" in camera_id.upper()
+                        is_checkin_cam = "CHECK IN" in camera_id.upper()
                         
-                        if self.intersect(A, B, C, D):
-                            AB_x = B[0] - A[0]
-                            AB_y = B[1] - A[1]
-                            CD_x = D[0] - C[0]
-                            CD_y = D[1] - C[1]
-                            cross = AB_x * CD_y - AB_y * CD_x
-                            
-                            action = None
-                            is_checkout_cam = "CHECK OUT" in camera_id.upper()
-                            is_checkin_cam = "CHECK IN" in camera_id.upper()
-                            
-                            if is_checkout_cam:
-                                action = "CHECK OUT"
-                                self.employee_presence.discard(best_match_id)
-                                logger.info(f"🚪 Employee {best_match_id} CHECKED OUT from {camera_id}")
-                            elif is_checkin_cam:
-                                action = "CHECK IN"
-                                self.employee_presence.add(best_match_id)
-                                logger.success(f"✅ Employee {best_match_id} CHECKED IN on {camera_id}")
+                        if is_checkout_cam:
+                            action = "CHECK OUT"
+                            self.employee_presence.discard(best_match_id)
+                            logger.info(f"🚪 Employee {best_match_id} CHECKED OUT from {camera_id}")
+                        elif is_checkin_cam:
+                            action = "CHECK IN"
+                            self.employee_presence.add(best_match_id)
+                            logger.success(f"✅ Employee {best_match_id} CHECKED IN on {camera_id}")
+                        else:
+                            if cross < 0:
+                                # Crossed left-to-right (Check In)
+                                if best_match_id not in self.employee_presence:
+                                    action = "CHECK IN"
+                                    self.employee_presence.add(best_match_id)
+                                    logger.success(f"✅ Employee {best_match_id} CHECKED IN on {camera_id}")
                             else:
-                                if cross < 0:
-                                    # Crossed left-to-right (Check In)
-                                    if best_match_id not in self.employee_presence:
-                                        action = "CHECK IN"
-                                        self.employee_presence.add(best_match_id)
-                                        logger.success(f"✅ Employee {best_match_id} CHECKED IN on {camera_id}")
-                                else:
-                                    # Crossed right-to-left (Check Out)
-                                    if best_match_id in self.employee_presence:
-                                        action = "CHECK OUT"
-                                        self.employee_presence.remove(best_match_id)
-                                        logger.info(f"🚪 Employee {best_match_id} CHECKED OUT from {camera_id}")
-                            if action:
-                                log_entry = {
-                                    "employee": f"Emp {best_match_id}", 
-                                    "action": action, 
-                                    "time": timestamp,
+                                # Crossed right-to-left (Check Out)
+                                if best_match_id in self.employee_presence:
+                                    action = "CHECK OUT"
+                                    self.employee_presence.remove(best_match_id)
+                                    logger.info(f"🚪 Employee {best_match_id} CHECKED OUT from {camera_id}")
+                        if action:
+                            log_entry = {
+                                "employee": f"Emp {best_match_id}", 
+                                "action": action, 
+                                "time": timestamp,
+                                "snapshot_file": None
+                            }
+                            self.recent_logs.append(log_entry)
+                            
+                            drawings = []
+                            
+                            event = DetectionEvent(
+                                plugin_name=self.plugin_name,
+                                event_type=action.replace(" ", "_"),
+                                camera_id=camera_id,
+                                timestamp=timestamp,
+                                confidence=1.0,
+                                metadata={
+                                    "employee_id": best_match_id,
+                                    "action": action,
+                                    "drawings": drawings,
                                     "snapshot_file": None
                                 }
-                                self.recent_logs.append(log_entry)
+                            )
+                            events.append(event)
                                 
-                                drawings = []
-                                
-                                event = DetectionEvent(
-                                    plugin_name=self.plugin_name,
-                                    event_type=action.replace(" ", "_"),
-                                    camera_id=camera_id,
-                                    timestamp=timestamp,
-                                    confidence=1.0,
-                                    metadata={
-                                        "employee_id": best_match_id,
-                                        "action": action,
-                                        "drawings": drawings,
-                                        "snapshot_file": None
-                                    }
-                                )
-                                events.append(event)
-                                    
-                    self.previous_centroids[best_match_id] = current_centroid
-                else:
-                    unauth_count += 1
-                    
+                self.previous_centroids[best_match_id] = current_centroid
+            else:
+                unauth_count += 1
+                
         # Evict stale tracking data (Memory Leak Fix)
         # Remove IDs not seen in 5 minutes (300 seconds)
         current_time = time.time()

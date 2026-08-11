@@ -44,24 +44,20 @@ class ParkingAnalyticsPlugin(BaseDetectionPlugin):
         occupied_spots = [False] * len(spots)
         vehicle_count = 0
         
-        if frame_data.detections is not None and getattr(frame_data.detections, 'boxes', None) is not None:
-            boxes = frame_data.detections.boxes.xyxy.cpu().numpy()
-            cls_ids = frame_data.detections.boxes.cls.cpu().numpy()
+        for det in frame_data.detections:
+            if det.class_id not in self.vehicle_classes:
+                continue
+                
+            vehicle_count += 1
             
-            for box, cls_id in zip(boxes, cls_ids):
-                if int(cls_id) not in self.vehicle_classes:
-                    continue
-                    
-                vehicle_count += 1
-                
-                x1, y1, x2, y2 = box
-                center_x = (x1 + x2) / 2
-                center_y = (y1 + y2) / 2
-                center_point = Point(center_x, center_y)
-                
-                for idx, poly in enumerate(spot_polys):
-                    if poly.contains(center_point):
-                        occupied_spots[idx] = True
+            x1, y1, x2, y2 = det.bbox
+            center_x = (x1 + x2) / 2
+            center_y = (y1 + y2) / 2
+            center_point = Point(center_x, center_y)
+            
+            for idx, poly in enumerate(spot_polys):
+                if poly.contains(center_point):
+                    occupied_spots[idx] = True
                         
         total_spots = len(spots)
         occupied_count = sum(occupied_spots)

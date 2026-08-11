@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 from unittest.mock import MagicMock, patch
-from app.engine.base import FrameData, TrackerContext
+from app.engine.base import FrameData, TrackerContext, NormalizedDetection
 from app.plugins.attendance.plugin import AttendanceDetectionPlugin
 
 class MockBoxes:
@@ -30,7 +30,7 @@ def test_attendance_plugin_no_crash(mock_config):
     
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
     
-    frame_data = FrameData(frame=frame, detections=MockDetections(boxes), camera_id="cam1", timestamp=1.0)
+    frame_data = FrameData(frame=frame, detections=[NormalizedDetection(class_id=0, confidence=1.0, bbox=[10,10,50,50], track_id=1)], camera_id="cam1", timestamp=1.0)
     events = plugin.process_frame(frame_data, context)
     
     assert isinstance(events, list)

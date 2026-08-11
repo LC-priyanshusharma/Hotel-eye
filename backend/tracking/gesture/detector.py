@@ -1,15 +1,22 @@
 import os
-import mediapipe as mp
 import numpy as np
 from loguru import logger
 from typing import List, Dict, Any
 
 from config.config import config
 
-BaseOptions = mp.tasks.BaseOptions
-GestureRecognizer = mp.tasks.vision.GestureRecognizer
-GestureRecognizerOptions = mp.tasks.vision.GestureRecognizerOptions
-VisionRunningMode = mp.tasks.vision.RunningMode
+try:
+    import mediapipe as mp
+    BaseOptions = mp.tasks.BaseOptions
+    GestureRecognizer = mp.tasks.vision.GestureRecognizer
+    GestureRecognizerOptions = mp.tasks.vision.GestureRecognizerOptions
+    VisionRunningMode = mp.tasks.vision.RunningMode
+except ImportError:
+    mp = None
+    BaseOptions = None
+    GestureRecognizer = None
+    GestureRecognizerOptions = None
+    VisionRunningMode = None
 
 import threading
 

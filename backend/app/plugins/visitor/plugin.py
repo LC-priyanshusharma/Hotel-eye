@@ -64,16 +64,13 @@ class VisitorPlugin(BaseDetectionPlugin):
         h, w = frame_data.frame.shape[:2]
         line_y = int(h * 0.5) # The physical tripwire line at 50% height
         
-        # Safely parse Ultralytics YOLO Results
         person_tracks = []
-        if hasattr(frame_data.detections, 'boxes') and getattr(frame_data.detections.boxes, 'id', None) is not None:
-            for box in frame_data.detections.boxes:
-                track_id = int(box.id[0].item())
-                class_id = int(box.cls[0].item())
-                if class_id == 0:
-                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                    person_tracks.append({"track_id": track_id, "bbox": [x1, y1, x2, y2]})
-                    self.track_last_seen[track_id] = current_time
+        for det in frame_data.detections:
+            if det.track_id is not None and det.class_id == 0:
+                track_id = det.track_id
+                x1, y1, x2, y2 = det.bbox
+                person_tracks.append({"track_id": track_id, "bbox": [x1, y1, x2, y2]})
+                self.track_last_seen[track_id] = current_time
                     
         # Process faces extracted asynchronously by FaceWorker
         for face in frame_data.faces:

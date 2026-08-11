@@ -14,9 +14,16 @@ class DetectionEvent(BaseModel):
     snapshot_path: Optional[str] = None
 
 @dataclass
+class NormalizedDetection:
+    class_id: int
+    confidence: float
+    bbox: List[float]  # [x_min, y_min, x_max, y_max]
+    track_id: Optional[int] = None
+
+@dataclass
 class FrameData:
     frame: np.ndarray
-    detections: List[Dict[str, Any]]
+    detections: List[NormalizedDetection]
     camera_id: str
     timestamp: float
     faces: List[Any] = field(default_factory=list)

@@ -9,6 +9,88 @@ from config.config import config
 from core.events.bus import RedisEventBus
 from api.server import app  # Required for uvicorn main:app
 
+def ds_consumer(result_queue: queue.Queue):
+    """Listens to DeepStream inference results via Redis."""
+    import redis
+    import json
+    from core.pipeline import DetectionEngine
+    from app.engine.base import FrameData
+    
+    logger.info("Started DeepStream consumer loop.")
+    redis_client = redis.Redis.from_url(config.REDIS_URL)
+    pubsub = redis_client.pubsub()
+    pubsub.subscribe("inference_result_ds")
+    
+    engine = DetectionEngine()
+    
+    for message in pubsub.listen():
+        if message["type"] == "message":
+            try:
+                # DeepStream minimal JSON parse
+                ds_data = json.loads(message["data"])
+                
+                # NvMsgConv format varies, let's assume it provides objects
+                # We extract bounding boxes and feed into our DetectionEngine
+                # This logic translates DeepStream JSON into LogicEye's expected format
+                camera_id = ds_data.get("sensor", {}).get("id", "camera1")
+                
+                objects = ds_data.get("object", [])
+                
+                from app.engine.base import NormalizedDetection
+                
+                detections = []
+                for obj in objects:
+                    bbox = obj.get("bbox", {})
+                    x = bbox.get("left", 0.0)
+                    y = bbox.get("top", 0.0)
+                    w = bbox.get("width", 0.0)
+                    h = bbox.get("height", 0.0)
+                    
+                    # NvTracker outputs object_id when tracking is enabled
+                    track_id = obj.get("object_id")
+                    
+                    # class_id is typically provided by nvmsgconv
+                    cls_id = obj.get("class_id", 0) 
+                    conf = obj.get("confidence", 1.0)
+                    
+                    det = NormalizedDetection(
+                        class_id=int(cls_id),
+                        confidence=float(conf),
+                        bbox=[float(x), float(y), float(x+w), float(y+h)],
+                        track_id=int(track_id) if track_id is not None else None
+                    )
+                    detections.append(det)
+                
+                frame_data = FrameData(
+                    frame=None, # No frame available from DeepStream over Redis natively
+                    detections=detections,
+                    camera_id=camera_id,
+                    timestamp=time.time(),
+                    faces=[],
+                    camera_url=camera_id
+                )
+                
+                events = engine.run_plugins(frame_data)
+                
+                packet = {
+                    "camera_id": camera_id,
+                    "frame": None,
+                    "detections": detections,
+                    "events": events,
+                    "fps": 30.0,
+                    "latency_ms": 0,
+                    "timestamp": time.time()
+                }
+                
+                if result_queue.full():
+                    try:
+                        result_queue.get_nowait()
+                    except queue.Empty:
+                        pass
+                result_queue.put_nowait(packet)
+            except Exception as e:
+                logger.error(f"Error parsing DeepStream message: {e}")
+
 def event_loop(result_queue: queue.Queue):
     """Pulls results from all cameras, updates API state, and forwards actionable events to Redis."""
     from core.state import update_global_state
@@ -56,7 +138,7 @@ def event_loop(result_queue: queue.Queue):
                     })
                     
                     event_bus.publish("logiceye:events", db_packet)
-                    logger.info(f"Published event packet to Redis for camera {packet['camera_id']}")
+                    logger.debug(f"Published event packet to Redis for camera {packet['camera_id']}")
                 
         except queue.Empty:
             continue

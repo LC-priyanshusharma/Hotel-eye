@@ -43,7 +43,7 @@ class PPEDetectionPlugin(BaseDetectionPlugin):
         frame = frame_data.frame
         detections = frame_data.detections
 
-        if not hasattr(detections, 'boxes') or detections.boxes is None:
+        if not detections:
             return events
 
         hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
@@ -55,12 +55,12 @@ class PPEDetectionPlugin(BaseDetectionPlugin):
         contractor_2_count = 0  # Yellow
         missing_ppe_count = 0
 
-        for box in detections.boxes:
-            cls_id = int(box.cls[0].item())
+        for det in detections:
+            cls_id = det.class_id
             if cls_id != 0:
                 continue
 
-            x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+            x1, y1, x2, y2 = map(int, det.bbox)
             
             h, w = frame.shape[:2]
             x1, y1 = max(0, x1), max(0, y1)

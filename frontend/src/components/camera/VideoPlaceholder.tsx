@@ -1,4 +1,5 @@
 import React, { memo, useEffect, useRef, useState } from 'react'
+import { useCameraStateStore } from '@/store/useCameraStateStore'
 
 export interface VideoPlayerProps {
   cameraId: string
@@ -10,10 +11,79 @@ export interface VideoPlayerProps {
 
 export const VideoPlayer = memo(({ cameraId, poster, loading, error }: VideoPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [retryCount, setRetryCount] = useState(0);
   const [isConnecting, setIsConnecting] = useState(true);
   const [hasFirstFrame, setHasFirstFrame] = useState(false);
   const peerConnection = useRef<RTCPeerConnection | null>(null);
+  const animFrameId = useRef<number>(0);
+
+  // Drawing Loop for bounding boxes
+  useEffect(() => {
+    if (!hasFirstFrame || !videoRef.current || !canvasRef.current) return;
+    
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let isActive = true;
+
+    const drawLoop = () => {
+      if (!isActive) return;
+
+      // Match canvas resolution to displayed video size
+      if (canvas.width !== video.clientWidth || canvas.height !== video.clientHeight) {
+        canvas.width = video.clientWidth;
+        canvas.height = video.clientHeight;
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Get latest detections without triggering React re-renders
+      const state = useCameraStateStore.getState().states[cameraId];
+      const detections = state?.detections || [];
+      
+      const videoNativeWidth = video.videoWidth || 1920;
+      const videoNativeHeight = video.videoHeight || 1080;
+      
+      const scaleX = canvas.width / videoNativeWidth;
+      const scaleY = canvas.height / videoNativeHeight;
+
+      for (const det of detections) {
+        if (!det.bbox || det.bbox.length !== 4) continue;
+        const [x1, y1, x2, y2] = det.bbox;
+        
+        const scaledX = x1 * scaleX;
+        const scaledY = y1 * scaleY;
+        const scaledW = (x2 - x1) * scaleX;
+        const scaledH = (y2 - y1) * scaleY;
+
+        ctx.strokeStyle = '#00ff00';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(scaledX, scaledY, scaledW, scaledH);
+        
+        // Optionally draw track ID or class
+        ctx.fillStyle = 'rgba(0, 255, 0, 0.2)';
+        ctx.fillRect(scaledX, scaledY, scaledW, scaledH);
+        
+        if (det.track_id !== undefined && det.track_id !== null) {
+          ctx.fillStyle = '#00ff00';
+          ctx.font = 'bold 12px monospace';
+          ctx.fillText(`ID: ${det.track_id}`, scaledX, scaledY - 4);
+        }
+      }
+
+      animFrameId.current = requestAnimationFrame(drawLoop);
+    };
+
+    drawLoop();
+
+    return () => {
+      isActive = false;
+      cancelAnimationFrame(animFrameId.current);
+    };
+  }, [hasFirstFrame, cameraId]);
 
   useEffect(() => {
     if (loading || error) return;
@@ -107,7 +177,7 @@ export const VideoPlayer = memo(({ cameraId, poster, loading, error }: VideoPlay
   }
 
   return (
-    <div className="w-full h-full relative bg-black flex items-center justify-center overflow-hidden">
+    <div className="w-full h-full relative bg-black flex items-center justify-center overflow-hidden group/player">
       
       {(loading || (isConnecting && !hasFirstFrame)) && (
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black animate-pulse">
@@ -132,7 +202,13 @@ export const VideoPlayer = memo(({ cameraId, poster, loading, error }: VideoPlay
         autoPlay
         playsInline
         muted
-        className="w-full h-full object-cover"
+        className="w-full h-full object-cover relative z-0"
+      />
+      
+      {/* Bounding Box Overlay Canvas */}
+      <canvas
+        ref={canvasRef}
+        className="absolute inset-0 w-full h-full object-cover z-10 pointer-events-none"
       />
     </div>
   )

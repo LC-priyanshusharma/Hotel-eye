@@ -39,6 +39,11 @@ async def lifespan(app: FastAPI):
     loop_thread = threading.Thread(target=event_loop, args=(camera_manager.result_queue,), daemon=True, name="EventLoop")
     loop_thread.start()
     
+    # 2.5 Start DeepStream Consumer thread
+    from main import ds_consumer
+    ds_thread = threading.Thread(target=ds_consumer, args=(camera_manager.result_queue,), daemon=True, name="DSConsumer")
+    ds_thread.start()
+    
     # 3. Start Global Workers (FaceWorker for Visitor/Employee Detection)
     camera_manager.start_global_workers()
     

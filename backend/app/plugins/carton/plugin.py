@@ -123,62 +123,57 @@ class CartonCountingPlugin(BaseDetectionPlugin):
             "thickness": 3
         })
         
-        if frame_data.detections is not None and getattr(frame_data.detections, 'boxes', None) is not None:
-            valid_boxes = []
-            input_centroids = []
-            
-            for box in frame_data.detections.boxes:
-                cls_id = int(box.cls[0].item())
-                if cls_id in {24, 26, 28, 73, 41, 69, 56, 55}:
-                    xyxy = box.xyxy[0]
-                    if hasattr(xyxy, 'cpu'):
-                        xyxy = xyxy.cpu().numpy()
-                    x1, y1, x2, y2 = float(xyxy[0]), float(xyxy[1]), float(xyxy[2]), float(xyxy[3])
-                    
-                    # Prevent multiple overlapping classes (e.g. suitcase and handbag) on the same physical carton
-                    overlap = False
-                    for existing_box in valid_boxes:
-                        if self._compute_iou((x1, y1, x2, y2), existing_box) > 0.4:
-                            overlap = True
-                            break
-                    
-                    if not overlap:
-                        valid_boxes.append((x1, y1, x2, y2))
-                        input_centroids.append([(x1+x2)/2, (y1+y2)/2])
-                    
-            input_centroids = np.array(input_centroids) if input_centroids else np.array([])
-            rect_to_id = self._update_tracker(input_centroids)
-            
-            for i, (x1, y1, x2, y2) in enumerate(valid_boxes):
-                tid = rect_to_id.get(i, f"U-{i}")
-                current_x = (x1 + x2) / 2
-                current_y = (y1 + y2) / 2
+        valid_boxes = []
+        input_centroids = []
+        
+        for det in frame_data.detections:
+            if det.class_id in {24, 26, 28, 73, 41, 69, 56, 55}:
+                x1, y1, x2, y2 = det.bbox
                 
-                if tid not in self.counted_cartons:
-                    if tid in self.carton_history:
-                        last_x = self.carton_history[tid]
-                        # Check if line was crossed AND if the carton is within the Y bounds of the exit line
-                        if (last_x <= self.exit_line_x < current_x) or (last_x >= self.exit_line_x > current_x):
-                            if self.exit_line_y_min <= current_y <= self.exit_line_y_max:
-                                self.counted_cartons.add(tid)
-                    self.carton_history[tid] = current_x
-                    
-                color = [0, 255, 0] if tid in self.counted_cartons else [255, 140, 0]
+                # Prevent multiple overlapping classes (e.g. suitcase and handbag) on the same physical carton
+                overlap = False
+                for existing_box in valid_boxes:
+                    if self._compute_iou((x1, y1, x2, y2), existing_box) > 0.4:
+                        overlap = True
+                        break
                 
-                drawings.append({
-                    "type": "rect",
-                    "coords": [x1, y1, x2, y2],
-                    "color": color,
-                    "thickness": 2
-                })
-                drawings.append({
-                    "type": "text",
-                    "coords": [x1, max(0, y1 - 10)],
-                    "color": color,
-                    "text": f"ID: {tid}",
-                    "scale": 0.8,
-                    "thickness": 2
-                })
+                if not overlap:
+                    valid_boxes.append((x1, y1, x2, y2))
+                    input_centroids.append([(x1+x2)/2, (y1+y2)/2])
+                
+        input_centroids = np.array(input_centroids) if input_centroids else np.array([])
+        rect_to_id = self._update_tracker(input_centroids)
+        
+        for i, (x1, y1, x2, y2) in enumerate(valid_boxes):
+            tid = rect_to_id.get(i, f"U-{i}")
+            current_x = (x1 + x2) / 2
+            current_y = (y1 + y2) / 2
+            
+            if tid not in self.counted_cartons:
+                if tid in self.carton_history:
+                    last_x = self.carton_history[tid]
+                    # Check if line was crossed AND if the carton is within the Y bounds of the exit line
+                    if (last_x <= self.exit_line_x < current_x) or (last_x >= self.exit_line_x > current_x):
+                        if self.exit_line_y_min <= current_y <= self.exit_line_y_max:
+                            self.counted_cartons.add(tid)
+                self.carton_history[tid] = current_x
+                
+            color = [0, 255, 0] if tid in self.counted_cartons else [255, 140, 0]
+            
+            drawings.append({
+                "type": "rect",
+                "coords": [x1, y1, x2, y2],
+                "color": color,
+                "thickness": 2
+            })
+            drawings.append({
+                "type": "text",
+                "coords": [x1, max(0, y1 - 10)],
+                "color": color,
+                "text": f"ID: {tid}",
+                "scale": 0.8,
+                "thickness": 2
+            })
                     
         # Emit stats every frame to update UI instantly
         events.append(DetectionEvent(
