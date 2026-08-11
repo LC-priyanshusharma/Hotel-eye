@@ -18,6 +18,11 @@ RUN wget https://github.com/NVIDIA-AI-IOT/deepstream_python_apps/releases/downlo
     pip3 install --no-cache-dir pyds-1.1.1-py3-none-linux_aarch64.whl redis numpy loguru && \
     rm pyds-1.1.1-py3-none-linux_aarch64.whl
 
+# Compile YOLO custom parser plugin
+RUN cd /opt/nvidia/deepstream/deepstream-6.0/sources/objectDetector_Yolo/nvdsinfer_custom_impl_Yolo && \
+    CUDA_VER=10.2 make && \
+    cp libnvdsinfer_custom_impl_Yolo.so /opt/nvidia/deepstream/deepstream-6.0/lib/
+
 COPY . /app/deepstream
 WORKDIR /app/deepstream
 
