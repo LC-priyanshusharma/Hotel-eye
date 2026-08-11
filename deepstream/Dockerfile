@@ -1,4 +1,4 @@
-FROM nvcr.io/nvidia/deepstream-l4t:6.0.1-base
+FROM nvcr.io/nvidia/deepstream-l4t:6.0.1-samples
 
 RUN apt-get update && apt-get install -y \
     python3-pip \
