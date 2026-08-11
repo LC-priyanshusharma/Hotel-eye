@@ -36,12 +36,14 @@ async def lifespan(app: FastAPI):
     db_worker.start()
     
     # 2. Start global event loop thread
-    loop_thread = threading.Thread(target=event_loop, args=(camera_manager.result_queue,), daemon=True, name="EventLoop")
+    import queue
+    result_queue = queue.Queue(maxsize=100)
+    loop_thread = threading.Thread(target=event_loop, args=(result_queue,), daemon=True, name="EventLoop")
     loop_thread.start()
     
     # 2.5 Start DeepStream Consumer thread
     from main import ds_consumer
-    ds_thread = threading.Thread(target=ds_consumer, args=(camera_manager.result_queue,), daemon=True, name="DSConsumer")
+    ds_thread = threading.Thread(target=ds_consumer, args=(result_queue,), daemon=True, name="DSConsumer")
     ds_thread.start()
     
     # 3. Start Global Workers (FaceWorker for Visitor/Employee Detection)
@@ -72,7 +74,7 @@ async def lifespan(app: FastAPI):
     logger.info("Initiating graceful shutdown of all camera pipelines...")
     
     # Get all active camera IDs
-    active_cameras = list(camera_manager.readers.keys())
+    active_cameras = list(camera_manager.running_cameras.keys())
     for cam_id in active_cameras:
         logger.info(f"Stopping pipeline for {cam_id} during shutdown...")
         camera_manager.stop_camera_pipeline(cam_id)
