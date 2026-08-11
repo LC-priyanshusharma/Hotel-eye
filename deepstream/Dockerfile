@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y \
 
 # Install pyds wheel (DeepStream Python bindings) for DS 6.0
 RUN wget https://github.com/NVIDIA-AI-IOT/deepstream_python_apps/releases/download/v1.1.1/pyds-1.1.1-py3-none-linux_aarch64.whl && \
-    pip3 install --no-cache-dir pyds-1.1.1-py3-none-linux_aarch64.whl redis numpy && \
+    pip3 install --no-cache-dir pyds-1.1.1-py3-none-linux_aarch64.whl redis numpy loguru && \
     rm pyds-1.1.1-py3-none-linux_aarch64.whl
 
 COPY . /app/deepstream
