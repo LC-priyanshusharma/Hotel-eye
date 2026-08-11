@@ -39,6 +39,21 @@ class CameraManager:
             
         self.running_cameras[camera_id] = {"url": actual_path}
         
+        # Register the stream with MediaMTX so frontend can proxy via WebRTC
+        try:
+            import requests
+            import re
+            # Clean camera ID to match frontend's encodeURIComponent(cameraId.replace(/[^a-zA-Z0-9_-]/g, ''))
+            clean_camera_id = re.sub(r'[^a-zA-Z0-9_-]', '', camera_id)
+            mtx_url = f"http://mediamtx:9997/v3/config/paths/add/{clean_camera_id}"
+            requests.post(mtx_url, json={
+                "source": actual_path,
+                "sourceOnDemand": True
+            }, timeout=2)
+            logger.info(f"Registered {clean_camera_id} with MediaMTX.")
+        except Exception as e:
+            logger.error(f"Failed to register camera {camera_id} with MediaMTX: {e}")
+        
         # Publish to DeepStream manager
         self.redis_client.publish("logiceye:commands", json.dumps({
             "command": "start_camera",
@@ -52,6 +67,18 @@ class CameraManager:
         """Stops and cleans up the pipeline for a single camera."""
         if camera_id in self.running_cameras:
             del self.running_cameras[camera_id]
+            
+            # Remove stream from MediaMTX
+            try:
+                import requests
+                import re
+                clean_camera_id = re.sub(r'[^a-zA-Z0-9_-]', '', camera_id)
+                mtx_url = f"http://mediamtx:9997/v3/config/paths/remove/{clean_camera_id}"
+                requests.post(mtx_url, timeout=2)
+                logger.info(f"Removed {clean_camera_id} from MediaMTX.")
+            except Exception as e:
+                logger.error(f"Failed to remove camera {camera_id} from MediaMTX: {e}")
+                
             self.redis_client.publish("logiceye:commands", json.dumps({
                 "command": "stop_camera",
                 "camera_id": camera_id
