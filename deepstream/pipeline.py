@@ -4,6 +4,7 @@ import redis
 import json
 import subprocess
 import time
+import threading
 from loguru import logger
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -12,6 +13,9 @@ pubsub = redis_client.pubsub()
 pubsub.subscribe("logiceye:commands")
 
 process = None
+active_cameras = {}
+restart_lock = threading.Lock()
+restart_timer = None
 
 def generate_config(cameras):
     # Base DS Config
@@ -34,14 +38,11 @@ gpu-id=0
 
 """
     
-    # Sinks (Redis)
+    # Sinks (fakesink — we do NOT use the DS message broker; 
+    # MediaMTX handles the video streaming to dashboard)
     ds_config += """[sink0]
 enable=1
-type=6
-msg-conv-config=msgconv_config.txt
-msg-broker-proto-lib=/opt/nvidia/deepstream/deepstream-6.0/lib/libnvds_redis_proto.so
-msg-broker-conn-str=redis;6379;inference_result_ds
-topic=inference_result_ds
+type=1
 
 [osd]
 enable=0
@@ -65,23 +66,38 @@ config-file=config_infer_yolo.txt
     with open("ds_config.txt", "w") as f:
         f.write(ds_config)
 
-def restart_deepstream(cameras):
+def _do_restart():
+    """Actually perform the restart. Called after debounce delay."""
     global process
-    if process:
-        process.terminate()
-        process.wait()
-    
-    if not cameras:
-        logger.info("No active cameras. DeepStream stopped.")
-        return
+    with restart_lock:
+        if process:
+            process.terminate()
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+            process = None
         
-    generate_config(cameras)
-    logger.info("Starting deepstream-app with new configuration...")
-    process = subprocess.Popen(["deepstream-app", "-c", "ds_config.txt"])
+        cameras = list(active_cameras.values())
+        if not cameras:
+            logger.info("No active cameras. DeepStream stopped.")
+            return
+            
+        generate_config(cameras)
+        logger.info(f"Starting deepstream-app with {len(cameras)} camera(s)...")
+        process = subprocess.Popen(["deepstream-app", "-c", "ds_config.txt"])
+
+def schedule_restart():
+    """Debounce restarts — wait 2 seconds for all camera commands to arrive before restarting."""
+    global restart_timer
+    if restart_timer:
+        restart_timer.cancel()
+    restart_timer = threading.Timer(2.0, _do_restart)
+    restart_timer.start()
 
 def main():
     logger.info("DeepStream Manager started. Listening for commands...")
-    active_cameras = {}
     
     # Send a ready ping to backend so it knows to sync active cameras
     redis_client.publish("logiceye:ds_status", "ready")
@@ -97,14 +113,19 @@ def main():
                 
                 if command == "start_camera":
                     active_cameras[cam_id] = {"url": url}
-                    restart_deepstream(list(active_cameras.values()))
+                    logger.info(f"Queued camera {cam_id} for start. Total: {len(active_cameras)}")
+                    schedule_restart()
                 elif command == "stop_camera":
                     if cam_id in active_cameras:
                         del active_cameras[cam_id]
-                        restart_deepstream(list(active_cameras.values()))
+                        logger.info(f"Removed camera {cam_id}. Total: {len(active_cameras)}")
+                        schedule_restart()
                 elif command == "sync_cameras":
-                    active_cameras = {c["id"]: c for c in data.get("cameras", [])}
-                    restart_deepstream(list(active_cameras.values()))
+                    active_cameras.clear()
+                    for c in data.get("cameras", []):
+                        active_cameras[c["id"]] = c
+                    logger.info(f"Synced {len(active_cameras)} cameras.")
+                    schedule_restart()
             except Exception as e:
                 logger.error(f"Error parsing message: {e}")
 

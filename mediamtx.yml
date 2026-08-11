@@ -3,13 +3,24 @@
 api: yes
 apiAddress: :9997
 
+# Disable authentication entirely for development
+authMethod: internal
+authInternalUsers:
+  - user: any
+    pass: ""
+    permissions:
+      - action: publish
+      - action: read
+      - action: playback
+      - action: api
+      - action: metrics
+      - action: pprof
+
 webrtc: yes
 webrtcAddress: :8189
 webrtcLocalUDPAddress: :8189
-webrtcAdditionalHosts: [127.0.0.1]
-# Use WebRTC to stream directly to dashboard
+webrtcAdditionalHosts: [127.0.0.1, 192.168.1.6]
 
 paths:
   all_others:
-    # Disable authentication for development WebRTC proxying
-    runOnInit: ""
+    source: publisher
