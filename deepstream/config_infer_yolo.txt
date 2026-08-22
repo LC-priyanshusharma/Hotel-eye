@@ -1,9 +1,9 @@
 [property]
 gpu-id=0
 net-scale-factor=0.0039215697906911373
-onnx-file=/app/backend/detection/yolo11n_opset12.onnx
-model-engine-file=/app/backend/detection/yolo11n_opset12.onnx_b1_gpu0_fp16.engine
-labelfile-path=labels.txt
+onnx-file=/home/user/LogicEye-main/backend/detection/yolo11n_opset12.onnx
+model-engine-file=/home/user/LogicEye-main/backend/detection/yolo11n_opset12.onnx_b4_gpu0_fp16.engine
+labelfile-path=/home/user/LogicEye-main/deepstream/labels.txt
 batch-size=1
 network-mode=2
 num-detected-classes=80
@@ -12,7 +12,7 @@ gie-unique-id=1
 process-mode=1
 network-color-format=0
 custom-network-config=
-custom-lib-path=/opt/nvidia/deepstream/deepstream-6.0/lib/libnvdsinfer_custom_impl_Yolo.so
+custom-lib-path=/home/user/LogicEye-main/deepstream/DeepStream-Yolo/nvdsinfer_custom_impl_Yolo/libnvdsinfer_custom_impl_Yolo.so
 parse-bbox-func-name=NvDsInferParseYolo
 maintain-aspect-ratio=1
 symmetric-padding=1

@@ -25,45 +25,7 @@ services:
     volumes:
       - ./mediamtx.yml:/mediamtx.yml
 
-  deepstream:
-    build: ./deepstream
-    runtime: nvidia
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-    volumes:
-      - ./deepstream:/app/deepstream
-      - ./backend/detection:/app/backend/detection
-    working_dir: /app/deepstream
-    command: >
-      bash -c "cd /opt/nvidia/deepstream/deepstream-6.0/sources/objectDetector_Yolo/nvdsinfer_custom_impl_Yolo && 
-      CUDA_VER=10.2 make && 
-      cp libnvdsinfer_custom_impl_Yolo.so /opt/nvidia/deepstream/deepstream-6.0/lib/ && 
-      cd /app/deepstream && python3 pipeline.py"
-    depends_on:
-      - redis
 
-  backend:
-    build:
-      context: ./backend
-    ports:
-      - "8000:8000"
-    environment:
-      - DATABASE_URL=postgresql://admin:admin@timescaledb:5432/cctv
-      - REDIS_URL=redis://redis:6379/0
-      - SECRET_KEY=super-secret-key-1234
-    depends_on:
-      - timescaledb
-      - redis
-    volumes:
-      - ./backend/snapshots:/app/snapshots
-
-  frontend:
-    build:
-      context: ./frontend
-    ports:
-      - "80:80"
-    depends_on:
-      - backend
 
 volumes:
   timescaledb_data:

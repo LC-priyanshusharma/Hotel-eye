@@ -1,4 +1,4 @@
-import { Maximize, Camera as CameraIcon, Video, VideoOff, Crosshair, Mic, Volume2, Settings, PictureInPicture, Signal, Users, SlidersHorizontal, Check, Play, Square, Zap, Box } from 'lucide-react'
+import { Maximize, Camera as CameraIcon, Video, VideoOff, Crosshair, Mic, Volume2, Settings, PictureInPicture, Signal, Users, SlidersHorizontal, Check, Play, Square, Zap, Box, Trash2 } from 'lucide-react'
 import { memo, useEffect, useState } from 'react'
 import { cn } from '@/utils/utils'
 import { motion } from 'framer-motion'
@@ -170,6 +170,24 @@ export const CameraCard = memo(({ id, name, location, pipelineStatus: parentPipe
               <Zap className="w-3 h-3 fill-current" />
               Analytics
             </button>
+            <button
+              onClick={async (e) => {
+                e.stopPropagation();
+                if (confirm('Are you sure you want to delete this camera?')) {
+                  try {
+                    await api.delete(`/api/cameras/${id}`);
+                    addToast({ title: 'Deleted', message: 'Camera removed successfully.', type: 'success' });
+                    window.location.reload();
+                  } catch (err) {
+                    addToast({ title: 'Error', message: 'Failed to delete camera.', type: 'danger' });
+                  }
+                }
+              }}
+              className="p-1.5 bg-danger/20 hover:bg-danger/80 text-danger hover:text-white border border-danger/30 rounded backdrop-blur transition-colors flex items-center gap-1 text-[10px] font-bold shadow-md pointer-events-auto"
+              title="Delete Camera"
+            >
+              <Trash2 className="w-3 h-3" /> DEL
+            </button>
             <div className="flex items-center gap-1.5 text-[10px] bg-background/60 border border-foreground/10 px-2 py-1 rounded backdrop-blur-sm text-white font-mono shadow-md pointer-events-auto">
               <Users className="w-3 h-3 text-primary" />
               <span className="font-semibold text-gray-300">CW:</span>
@@ -242,7 +260,18 @@ export const CameraCard = memo(({ id, name, location, pipelineStatus: parentPipe
           { icon: Mic, label: 'Mic', action: () => addToast({ title: 'Hardware Error', message: 'Hardware not supported by this camera model.', type: 'danger' }) },
           { icon: Volume2, label: 'Audio', action: () => addToast({ title: 'Hardware Error', message: 'Hardware not supported by this camera model.', type: 'danger' }) },
           { icon: PictureInPicture, label: 'PIP', action: () => addToast({ title: 'Picture-in-Picture', message: 'Feature coming soon.', type: 'default' }) },
-          { icon: Settings, label: 'Settings', action: () => addToast({ title: 'Hardware Error', message: 'Hardware not supported by this camera model.', type: 'danger' }) }
+          { icon: Settings, label: 'Settings', action: () => addToast({ title: 'Hardware Error', message: 'Hardware not supported by this camera model.', type: 'danger' }) },
+          { icon: Trash2, label: 'Delete Camera', action: async () => {
+              if(confirm('Are you sure you want to delete this camera?')) {
+                 try {
+                   await api.delete(`/api/cameras/${id}`);
+                   addToast({ title: 'Deleted', message: 'Camera deleted successfully.', type: 'success' });
+                   window.location.reload();
+                 } catch(e) {
+                   addToast({ title: 'Error', message: 'Failed to delete camera.', type: 'danger' });
+                 }
+              }
+          }}
         ].map((btn, i) => (
           <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} key={i} onClick={(e) => { e.stopPropagation(); btn.action(e); }} className="p-2 bg-background/60 hover:bg-primary backdrop-blur-sm border border-foreground/10 rounded-lg text-foreground/80 hover:text-white transition-all shadow-lg group/btn relative">
             <btn.icon className="w-4 h-4" />

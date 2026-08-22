@@ -118,3 +118,9 @@ import os
 
 os.makedirs("snapshots", exist_ok=True)
 app.mount("/snapshots", StaticFiles(directory="snapshots"), name="snapshots")
+
+frontend_dist = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist"))
+if os.path.exists(frontend_dist):
+    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
+else:
+    print(f"Warning: Frontend dist directory not found at {frontend_dist}. UI will not be served natively.")

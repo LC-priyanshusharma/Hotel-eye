@@ -19,7 +19,7 @@ authInternalUsers:
 webrtc: yes
 webrtcAddress: :8189
 webrtcLocalUDPAddress: :8189
-webrtcAdditionalHosts: [127.0.0.1, 192.168.1.6]
+webrtcAdditionalHosts: [127.0.0.1, 192.168.1.6, 106.201.231.217]
 
 paths:
   all_others:

@@ -15,7 +15,12 @@ class DetectionEvent(BaseModel):
 
 @dataclass
 class NormalizedDetection:
+    camera_id: str
+    edge_id: str
+    frame_id: int
+    timestamp: float
     class_id: int
+    class_name: str
     confidence: float
     bbox: List[float]  # [x_min, y_min, x_max, y_max]
     track_id: Optional[int] = None

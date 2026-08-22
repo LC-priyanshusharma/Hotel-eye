@@ -145,10 +145,35 @@ def event_loop(result_queue: queue.Queue):
         except Exception as e:
             logger.error(f"Event loop error: {e}")
 
+def telemetry_consumer():
+    """Listens to Edge Telemetry via Redis and caches it."""
+    import redis
+    import json
+    from config.config import config
+    from core.telemetry_cache import telemetry_cache
+    
+    logger.info("Started Telemetry consumer loop.")
+    try:
+        redis_client = redis.Redis.from_url(config.REDIS_URL)
+        pubsub = redis_client.pubsub()
+        pubsub.subscribe("logiceye:telemetry")
+        
+        for message in pubsub.listen():
+            if message["type"] == "message":
+                try:
+                    data = json.loads(message["data"])
+                    edge_id = data.get("edge_id", "unknown")
+                    telemetry_cache.update(edge_id, data)
+                except Exception as e:
+                    logger.error(f"Error parsing telemetry message: {e}")
+    except Exception as e:
+        logger.error(f"Telemetry consumer failed: {e}")
+
 def main():
     """Entry point — all initialization is handled by server.py startup event."""
     logger.info("Starting LogicEye AI CCTV Platform...")
     try:
+        threading.Thread(target=telemetry_consumer, daemon=True).start()
         uvicorn.run("api.server:app", host="0.0.0.0", port=8000, log_level="error")
     except KeyboardInterrupt:
         logger.info("Shutting down...")

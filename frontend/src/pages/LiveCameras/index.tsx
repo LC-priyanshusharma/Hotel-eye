@@ -70,6 +70,12 @@ export function LiveCameras() {
     try {
       const res = await api.post('/api/cameras', { name: cameraName, rtsp_url: rtspUrl })
       if (res.status === 200) {
+        const newCameraId = res.data.camera.id;
+        try {
+          await api.post('/api/cameras/start', { camera_id: newCameraId });
+        } catch (e) {
+          console.error("Failed to auto-start camera", e);
+        }
         fetchCameras()
         setCameraName('')
         setRtspUrl('')
@@ -89,16 +95,7 @@ export function LiveCameras() {
     .filter(camId => camId !== 'SYSTEM')
     .map((camId, idx) => {
     const dbCam = backendCameras.find((c: any) => c.id === camId)
-    let name = dbCam ? dbCam.name : `Camera ${idx + 1}`
-    
-    if (!dbCam) {
-      if (camId.includes('hlo.mp4')) name = 'ANPR Camera'
-      else if (camId.includes('CHECK IN')) name = 'Check In Camera'
-      else if (camId.includes('CHECK OUT')) name = 'Check Out Camera'
-      else if (camId.includes('.mp4')) name = 'Camera 1 Test Video'
-      if (camId.includes('192.168.1.121')) name = 'Camera 2 Lobby'
-      if (camId.includes('332263_medium.mp4')) name = 'Carton Counting'
-    }
+    const name = dbCam ? dbCam.name : `Camera ${idx + 1}`
     
     return {
       id: camId,

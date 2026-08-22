@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from loguru import logger
 
 from core.state import LATEST_DATA, DATA_LOCK
+from core.telemetry_cache import telemetry_cache
 from services.event_service import EventService
 from database.session import SessionLocal
 from database.models.models import CameraEvent
@@ -11,7 +12,12 @@ from database.repositories.event_repository import EventRepository
 
 router = APIRouter(tags=["System"])
 
-@router.get("/")
+@router.get("/telemetry")
+def get_telemetry():
+    """Returns the latest edge telemetry hardware stats."""
+    return JSONResponse(content=telemetry_cache.get_all())
+
+@router.get("/api/health")
 def health_check():
     return {"status": "running", "active_cameras": list(LATEST_DATA.keys())}
 

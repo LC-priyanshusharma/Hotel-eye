@@ -9,8 +9,7 @@ export interface VideoPlayerProps {
 }
 
 export const VideoPlayer = memo(({ cameraId, poster, loading, error }: VideoPlayerProps) => {
-  const token = localStorage.getItem('access_token') || '';
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const posterImgRef = useRef<HTMLImageElement>(null);
   
   const [retryCount, setRetryCount] = useState(0);
@@ -21,81 +20,80 @@ export const VideoPlayer = memo(({ cameraId, poster, loading, error }: VideoPlay
     if (loading || error) return;
     
     setIsWsConnecting(true);
-    let ws: WebSocket | null = null;
+    let pc: RTCPeerConnection | null = null;
     let isActive = true;
-    
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
-    const wsUrl = `${protocol}//${host}/ws/video/${encodeURIComponent(cameraId)}?token=${encodeURIComponent(token)}`;
-    
-    ws = new WebSocket(wsUrl);
-    ws.binaryType = 'blob';
 
-    ws.onopen = () => {
-      setIsWsConnecting(false);
-      setRetryCount(0);
-    };
-
-    ws.onmessage = (event) => {
-      if (!isActive) return;
-      if (event.data instanceof Blob && canvasRef.current) {
-        const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d', { alpha: false }); // alpha false optimizes performance
-        if (!ctx) return;
+    const connectWebRTC = async () => {
+      try {
+        pc = new RTCPeerConnection();
         
-        createImageBitmap(event.data).then(bitmap => {
-          if (!isActive) {
-            bitmap.close();
-            return;
+        pc.addTransceiver('video', { direction: 'recvonly' });
+        // Optional: add audio if available
+        // pc.addTransceiver('audio', { direction: 'recvonly' });
+
+        pc.ontrack = (event) => {
+          if (!isActive) return;
+          if (videoRef.current) {
+            videoRef.current.srcObject = event.streams[0];
+            setIsWsConnecting(false);
           }
-          
-          if (!hasFirstFrame) {
-            setHasFirstFrame(true);
-          }
-          
-          // Match canvas resolution to video stream resolution
-          if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
-            canvas.width = bitmap.width;
-            canvas.height = bitmap.height;
-          }
-          
-          ctx.drawImage(bitmap, 0, 0);
-          bitmap.close(); // Immediately release memory!
-        }).catch(err => {
-          console.error(`Error decoding video frame for ${cameraId}:`, err);
+        };
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        // MediaMTX WHEP Endpoint
+        // Default to Jetson public IP if running on localhost
+        let host = window.location.hostname;
+        if (host === 'localhost' || host === '127.0.0.1') {
+          host = '106.201.231.217';
+        }
+        const whepUrl = `http://${host}:8189/${encodeURIComponent(cameraId)}/whep`;
+
+        const response = await fetch(whepUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/sdp'
+          },
+          body: pc.localDescription?.sdp
         });
-      }
-    };
 
-    ws.onerror = (e) => {
-      console.error(`Video WebSocket error for ${cameraId}:`, e);
-    };
+        if (!response.ok) {
+          throw new Error(`WHEP connection failed: ${response.statusText}`);
+        }
 
-    ws.onclose = () => {
-      setIsWsConnecting(true);
-      
-      // Auto-reconnect with exponential backoff if dropped
-      if (retryCount < 5) {
-        const timeout = Math.min(1000 * Math.pow(2, retryCount), 10000);
-        setTimeout(() => {
-          if (isActive) setRetryCount(prev => prev + 1);
-        }, timeout);
-      } else {
-        if (posterImgRef.current && poster) {
-          posterImgRef.current.style.opacity = '0.3';
-          posterImgRef.current.style.display = 'block';
-          if (canvasRef.current) canvasRef.current.style.display = 'none';
+        const answerSdp = await response.text();
+        if (!isActive) return;
+
+        await pc.setRemoteDescription(new RTCSessionDescription({
+          type: 'answer',
+          sdp: answerSdp
+        }));
+
+      } catch (err) {
+        console.error(`WebRTC connection error for ${cameraId}:`, err);
+        if (isActive) {
+          setIsWsConnecting(true);
+          // Auto-reconnect
+          if (retryCount < 5) {
+            const timeout = Math.min(1000 * Math.pow(2, retryCount), 10000);
+            setTimeout(() => {
+              if (isActive) setRetryCount(prev => prev + 1);
+            }, timeout);
+          }
         }
       }
     };
 
+    connectWebRTC();
+
     return () => {
       isActive = false;
-      if (ws) {
-        ws.close();
+      if (pc) {
+        pc.close();
       }
     };
-  }, [cameraId, token, retryCount, loading, error, poster]);
+  }, [cameraId, retryCount, loading, error]);
 
   if (error) {
     return (
@@ -110,30 +108,42 @@ export const VideoPlayer = memo(({ cameraId, poster, loading, error }: VideoPlay
       <div className="w-full h-full relative bg-black flex flex-col items-center justify-center p-4 animate-pulse">
         <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mb-4" />
         <span className="text-foreground/50 font-mono text-xs tracking-widest uppercase">
-          {loading ? "Initializing Stream" : "Connecting Video WS..."}
+          {loading ? "Initializing Stream" : "Connecting WebRTC..."}
         </span>
+        
+        {/* Hidden video element to capture the first frame behind the loader */}
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          onPlay={() => setHasFirstFrame(true)}
+          className="absolute inset-0 w-full h-full object-cover opacity-0"
+        />
       </div>
     )
   }
 
   return (
     <div className="w-full h-full relative bg-black flex items-center justify-center overflow-hidden">
-      {/* Poster fallback when WebSocket permanently fails */}
-      {poster && (
+      {/* Poster fallback */}
+      {poster && !hasFirstFrame && (
         <img 
           ref={posterImgRef}
           src={poster} 
-          className="absolute inset-0 w-full h-full object-cover" 
-          style={{ display: 'none' }}
+          className="absolute inset-0 w-full h-full object-cover opacity-30" 
           alt={`Poster for ${cameraId}`}
         />
       )}
       
-      {/* Hardware-accelerated canvas for 60fps JPEG rendering */}
-      <canvas
-        ref={canvasRef}
+      {/* Hardware-accelerated WebRTC video */}
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        onPlay={() => setHasFirstFrame(true)}
         className="w-full h-full object-cover"
-        style={{ display: 'block' }}
       />
     </div>
   )

@@ -18,43 +18,43 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://106.201.231.217:8000',
         changeOrigin: true
       },
       '/auth': {
-        target: 'http://localhost:8000',
+        target: 'http://106.201.231.217:8000',
         changeOrigin: true
       },
       '/users': {
-        target: 'http://localhost:8000',
+        target: 'http://106.201.231.217:8000',
         changeOrigin: true
       },
       '/roles': {
-        target: 'http://localhost:8000',
+        target: 'http://106.201.231.217:8000',
         changeOrigin: true
       },
       '/events': {
-        target: 'http://localhost:8000',
+        target: 'http://106.201.231.217:8000',
         changeOrigin: true
       },
       '/analytics': {
-        target: 'http://localhost:8000',
+        target: 'http://106.201.231.217:8000',
         changeOrigin: true
       },
       '/snapshots': {
-        target: 'http://localhost:8000',
+        target: 'http://106.201.231.217:8000',
         changeOrigin: true
       },
       '/video': {
-        target: 'http://localhost:8000',
+        target: 'http://106.201.231.217:8000',
         changeOrigin: true
       },
       '/kill-stream': {
-        target: 'http://localhost:8000',
+        target: 'http://106.201.231.217:8000',
         changeOrigin: true
       },
       '/ws': {
-        target: 'ws://localhost:8000',
+        target: 'ws://106.201.231.217:8000',
         ws: true
       }
     }

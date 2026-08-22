@@ -1,0 +1,25 @@
+[property]
+gpu-id=0
+net-scale-factor=0.0078125
+offsets=127.5;127.5;127.5
+onnx-file=w600k_mbf.onnx
+# 112x112 is the expected input shape for MobileFaceNet
+network-mode=2
+# 2 = FP16
+num-detected-classes=1
+# Secondary inference engine configuration
+process-mode=2
+# 2 = SGIE (Secondary)
+operate-on-gie-id=1
+# The primary GIE (YOLO) id is 1
+operate-on-class-ids=0
+# Operate only on class 0 (Person/Face)
+infer-dims=3;112;112
+batch-size=4
+network-type=100
+# 100 = Custom/Other (We just want the tensor output)
+output-tensor-meta=1
+# Force it to attach the raw 512D tensor to the object meta
+
+[class-attrs-all]
+# SGIE doesn't output bounding boxes, only embeddings

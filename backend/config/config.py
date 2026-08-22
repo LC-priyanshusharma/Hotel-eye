@@ -70,16 +70,12 @@ class AppConfig(BaseSettings):
     )
     
     UNTRACKED_CAMERAS: List[str] = Field(
-        default=["Screen Recording", "332263_medium.mp4"],
+        default=[],
         description="List of camera substrings that should bypass ByteTrack to avoid confidence thresholds filtering out low-conf objects."
     )
     
     CAMERA_CONFIDENCE_THRESHOLDS: dict = Field(
-        default={
-            "Screen Recording": 0.1,
-            "CAM-5DD5A521": 0.01,  # Legacy ID
-            "332263_medium.mp4": 0.01 # Lower threshold for carton counting
-        },
+        default={},
         description="Camera-specific confidence thresholds. Overrides CONFIDENCE_THRESHOLD if matched."
     )
     
@@ -106,7 +102,7 @@ class AppConfig(BaseSettings):
     GESTURE_ASSOCIATE_WITH_PERSON: bool = Field(default=True)
     
     HAND_RAISE_ENABLED_CAMERAS: List[str] = Field(
-        default=["rtsp://admin:Snap@1222@192.168.1.121/stream1", "rtsp://admin:Snap@1222@192.168.1.122/stream1"],
+        default=["default"],
         description="List of camera URLs that are allowed to trigger HAND_RAISE_DETECTED alerts."
     )
     
@@ -117,13 +113,7 @@ class AppConfig(BaseSettings):
     RESTRICTED_ZONES: dict = Field(
         default={
             # Default test zone (a large square in the center of a 1080p frame)
-            "default": [(400, 300), (1500, 300), (1500, 800), (400, 800)],
-            # Lobby camera (121): Top Left
-            "rtsp://admin:Snap@1222@192.168.1.121/stream1": [(100, 100), (600, 100), (600, 600), (100, 600)],
-            # Room camera (122): No intrusion zone for the room!
-            "rtsp://admin:Snap@1222@192.168.1.122/stream1": [],
-            # Intrusion camera (576x1024 portrait): Zone covers the room interior past the glass gate
-            "WhatsApp Video 2026-07-27 at 14.55.41.mp4": [(50, 400), (530, 400), (530, 950), (50, 950)]
+            "default": [(400, 300), (1500, 300), (1500, 800), (400, 800)]
         }
     )
     
@@ -138,11 +128,7 @@ class AppConfig(BaseSettings):
     CHECKIN_LINES: dict = Field(
         default={
             # Default vertical line down the middle of a 1080p frame
-            "default": ((960, 0), (960, 1080)),
-            # Lobby camera (121): Vertical line
-            "rtsp://admin:Snap@1222@192.168.1.121/stream1": ((960, 0), (960, 1080)),
-            # Room camera (122): Vertical line
-            "rtsp://admin:Snap@1222@192.168.1.122/stream1": ((960, 0), (960, 1080))
+            "default": ((960, 0), (960, 1080))
         }
     )
     
@@ -157,10 +143,6 @@ class AppConfig(BaseSettings):
                 [(1500, 800), (1600, 800), (1600, 1000), (1500, 1000)], # Spot 1
                 [(1610, 800), (1710, 800), (1710, 1000), (1610, 1000)], # Spot 2
                 [(1720, 800), (1820, 800), (1820, 1000), (1720, 1000)], # Spot 3
-            ],
-            "PARKING.mp4": [
-                [[100, 300], [1800, 300], [1800, 500], [100, 500]],
-                [[100, 600], [1800, 600], [1800, 800], [100, 800]]
             ]
         }
     )

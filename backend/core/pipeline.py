@@ -53,6 +53,7 @@ class InferenceWorker:
 
     def _run(self):
         logger.info(f"Inference thread {self.camera_id} starting up...")
+        ai_available = False
         try:
             # camera_url contains the filename (e.g. 332263_medium.mp4) which matches the config.
             self.conf = config.get_confidence_for_camera(self.camera_url)
@@ -64,9 +65,9 @@ class InferenceWorker:
             )
             self.tracker = TrackerFactory.create(config.TRACKER_BACKEND)
             self.detection_engine = DetectionEngine()
+            ai_available = True
         except Exception as e:
-            logger.error(f"Failed to load AI components: {e}")
-            return
+            logger.warning(f"AI components unavailable for {self.camera_id}: {e}. Video-only mode.")
             
         last_time = time.time()
             
@@ -96,39 +97,50 @@ class InferenceWorker:
                 fps = round(1.0 / max((current_time - last_time), 0.001), 1)
                 last_time = current_time
                 
-                # Dynamically update required classes based on currently active plugins
-                current_classes = self.detection_engine.get_all_required_classes(self.camera_id)
+                result = []
+                events = {}
                 
-                if not current_classes:
-                    # If no plugins are active, skip YOLO entirely to save 100% CPU and avoid empty class crashes!
-                    result = []
-                else:
-                    # Base inference
-                    if config.should_bypass_tracker(self.camera_id):
-                        # No tracking, just pure detection (e.g. for fast alerts)
-                        result = self.detector.detect(frame, conf=self.conf, classes=current_classes)
-                    else:
-                        # Detect then track
-                        detections = self.detector.detect(frame, conf=self.conf, classes=current_classes)
-                        result = self.tracker.update(detections, frame)
-                # Fetch latest async results from FaceDataProvider
-                faces = []
-                if self.face_data_provider:
-                    face_data = self.face_data_provider.get_latest_results(self.camera_id)
-                    if isinstance(face_data, dict):
-                        faces = face_data.get("faces", [])
-                    
-                # Run New Detection Framework Plugins
-                # Pass camera_url to frame_data instead of camera_id (UUID) so config can match it
-                frame_data = FrameData(
-                    frame=frame, 
-                    detections=result, 
-                    camera_id=self.camera_id, # Match UI and backend database IDs
-                    timestamp=current_time,
-                    faces=faces,
-                    camera_url=self.camera_url
-                )
-                events = self.detection_engine.run_plugins(frame_data)
+                if ai_available:
+                    try:
+                        # Dynamically update required classes based on currently active plugins
+                        current_classes = self.detection_engine.get_all_required_classes(self.camera_id)
+                        
+                        if not current_classes:
+                            # If no plugins are active, skip YOLO entirely to save 100% CPU and avoid empty class crashes!
+                            result = []
+                        else:
+                            # Base inference
+                            if config.should_bypass_tracker(self.camera_id):
+                                # No tracking, just pure detection (e.g. for fast alerts)
+                                result = self.detector.detect(frame, conf=self.conf, classes=current_classes)
+                            else:
+                                # Detect then track
+                                detections = self.detector.detect(frame, conf=self.conf, classes=current_classes)
+                                result = self.tracker.update(detections, frame)
+                        # Fetch latest async results from FaceDataProvider
+                        faces = []
+                        if self.face_data_provider:
+                            face_data = self.face_data_provider.get_latest_results(self.camera_id)
+                            if isinstance(face_data, dict):
+                                faces = face_data.get("faces", [])
+                            
+                        # Run New Detection Framework Plugins
+                        # Pass camera_url to frame_data instead of camera_id (UUID) so config can match it
+                        frame_data = FrameData(
+                            frame=frame, 
+                            detections=result, 
+                            camera_id=self.camera_id, # Match UI and backend database IDs
+                            timestamp=current_time,
+                            faces=faces,
+                            camera_url=self.camera_url
+                        )
+                        events = self.detection_engine.run_plugins(frame_data)
+                        
+                        # Notify all generic observers (Decoupled Phase C)
+                        for observer in self.observers:
+                            observer.on_frame_processed(frame_data)
+                    except Exception as e:
+                        logger.error(f"AI error for {self.camera_id}: {e}")
                 
                 data_packet = {
                     "camera_id": self.camera_id,
@@ -139,10 +151,6 @@ class InferenceWorker:
                     "latency_ms": latency_ms,
                     "timestamp": time.time()
                 }
-                
-                # Notify all generic observers (Decoupled Phase C)
-                for observer in self.observers:
-                    observer.on_frame_processed(frame_data)
                 
                 if self.output_queue.full():
                     try:
@@ -159,3 +167,5 @@ class InferenceWorker:
                 pass
             except Exception as e:
                 logger.error(f"Error in inference loop {self.camera_id}: {e}")
+                time.sleep(0.1)
+
