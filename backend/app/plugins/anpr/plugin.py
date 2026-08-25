@@ -162,6 +162,21 @@ class ANPRPlugin(BaseDetectionPlugin):
             # Emit a live event so the plate and vehicle box are drawn in the frontend
             best_plate, best_conf = vehicle_track.fusion.get_best_plate()
             if best_plate:
+                import cv2, base64
+                b64_veh = getattr(vehicle_track, 'b64_snapshot', None)
+                if not b64_veh and vehicle_crop is not None and vehicle_crop.size > 0:
+                    ret, buf = cv2.imencode('.jpg', vehicle_crop, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
+                    if ret:
+                        b64_veh = f"data:image/jpeg;base64,{base64.b64encode(buf).decode('utf-8')}"
+                        vehicle_track.b64_snapshot = b64_veh
+
+                b64_plate = getattr(vehicle_track, 'b64_plate_snapshot', None)
+                if not b64_plate and hasattr(vehicle_track, 'best_plate_snapshot') and vehicle_track.best_plate_snapshot is not None:
+                    ret, buf = cv2.imencode('.jpg', vehicle_track.best_plate_snapshot, [int(cv2.IMWRITE_JPEG_QUALITY), 75])
+                    if ret:
+                        b64_plate = f"data:image/jpeg;base64,{base64.b64encode(buf).decode('utf-8')}"
+                        vehicle_track.b64_plate_snapshot = b64_plate
+
                 live_event = DetectionEvent(
                     plugin_name=self.plugin_name,
                     event_type="LIVE_TRACKING",
@@ -171,7 +186,8 @@ class ANPRPlugin(BaseDetectionPlugin):
                     metadata={
                         "plate_number": best_plate,
                         "vehicle_type": getattr(vehicle_track, 'vehicle_type', 'Vehicle'),
-                        "vehicle_snapshot": getattr(vehicle_track, 'b64_snapshot', None),
+                        "vehicle_snapshot": b64_veh,
+                        "plate_snapshot": b64_plate,
                         "drawings": [
                             {
                                 "type": "rect",

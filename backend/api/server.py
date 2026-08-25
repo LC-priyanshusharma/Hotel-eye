@@ -137,8 +137,9 @@ app.add_middleware(
 from fastapi.staticfiles import StaticFiles
 import os
 
-os.makedirs("snapshots", exist_ok=True)
-app.mount("/snapshots", StaticFiles(directory="snapshots"), name="snapshots")
+snapshots_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "snapshots"))
+os.makedirs(snapshots_dir, exist_ok=True)
+app.mount("/snapshots", StaticFiles(directory=snapshots_dir), name="snapshots")
 
 frontend_dist = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist"))
 if os.path.exists(frontend_dist):

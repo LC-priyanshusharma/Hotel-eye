@@ -83,6 +83,8 @@ class PlateValidator:
                     if cls.STRATEGIES["private"].match(candidate):
                         return True, candidate
 
-        # Strict validation: If it doesn't match an Indian plate format, REJECT it.
-        # This completely eliminates hallucinations like "PE3G4" or partial reads.
+        # Accept alphanumeric plates with at least 4 characters
+        if len(cleaned) >= 4:
+            return True, cleaned
+
         return False, cleaned

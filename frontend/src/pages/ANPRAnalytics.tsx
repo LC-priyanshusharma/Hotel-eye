@@ -199,8 +199,12 @@ export default function ANPRAnalytics() {
                       <td className="py-3 text-zinc-300">{row.camera_id}</td>
                       <td className="py-3 text-zinc-300">{(row.confidence * 100).toFixed(1)}%</td>
                       <td className="py-3">
-                        {row.confidence === 1.0 && row.plate_snapshot && (
-                          <img src={`/${row.plate_snapshot}`} alt="Plate" className="h-8 w-auto rounded border border-zinc-700" />
+                        {row.plate_snapshot ? (
+                          <img src={row.plate_snapshot.startsWith('data:') ? row.plate_snapshot : `/${row.plate_snapshot}`} alt="Plate" className="h-8 w-auto rounded border border-zinc-700 object-contain" />
+                        ) : row.vehicle_snapshot ? (
+                          <img src={row.vehicle_snapshot.startsWith('data:') ? row.vehicle_snapshot : `/${row.vehicle_snapshot}`} alt="Vehicle" className="h-8 w-auto rounded border border-zinc-700 object-contain" />
+                        ) : (
+                          <span className="text-zinc-600 text-xs">No image</span>
                         )}
                       </td>
                     </tr>

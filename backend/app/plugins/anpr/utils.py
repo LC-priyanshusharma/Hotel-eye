@@ -3,13 +3,27 @@ import cv2
 import uuid
 import time
 import numpy as np
+from loguru import logger
 
 def save_snapshot(image: np.ndarray, prefix: str = "anpr") -> str:
     """
     Saves an image snapshot to the snapshots directory.
-    Returns the file path.
+    Returns the relative path for HTTP serving.
     """
-    return None
+    if image is None or not isinstance(image, np.ndarray) or image.size == 0:
+        return None
+    try:
+        # Base backend dir
+        backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+        snapshots_dir = os.path.join(backend_dir, "snapshots")
+        os.makedirs(snapshots_dir, exist_ok=True)
+        filename = f"{prefix}_{int(time.time()*1000)}_{uuid.uuid4().hex[:6]}.jpg"
+        filepath = os.path.join(snapshots_dir, filename)
+        cv2.imwrite(filepath, image)
+        return f"snapshots/{filename}"
+    except Exception as e:
+        logger.error(f"Failed to save snapshot: {e}")
+        return None
 
 def enhance_plate_image(image: np.ndarray, clahe_clip: float = 2.0, denoise_h: float = 30.0) -> np.ndarray:
     """
