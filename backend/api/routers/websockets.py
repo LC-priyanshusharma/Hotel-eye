@@ -28,12 +28,26 @@ async def telemetry_broadcaster():
                 with DATA_LOCK:
                     clean_data = {}
                     for cam, data in LATEST_DATA.items():
+                        raw_dets = data.get("detections", [])
+                        clean_dets = []
+                        for d in raw_dets:
+                            if hasattr(d, "bbox"):
+                                clean_dets.append({
+                                    "class_id": int(getattr(d, "class_id", 0)),
+                                    "confidence": float(getattr(d, "confidence", 1.0)),
+                                    "bbox": [float(b) for b in getattr(d, "bbox", [0,0,0,0])],
+                                    "track_id": int(d.track_id) if getattr(d, "track_id", None) is not None else None
+                                })
+                            elif isinstance(d, dict):
+                                clean_dets.append(d)
+
                         clean_data[cam] = {
                             "camera_id": data["camera_id"],
                             "timestamp": data["timestamp"],
                             "fps": data.get("fps", 0),
                             "latency_ms": data.get("latency_ms", 0),
                             "events": data.get("events", {}),
+                            "detections": clean_dets
                         }
                         
                 safe_data = clean_numpy(clean_data)

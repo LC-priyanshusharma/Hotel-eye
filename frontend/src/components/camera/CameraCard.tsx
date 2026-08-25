@@ -1,8 +1,9 @@
-import { Maximize, Camera as CameraIcon, Video, VideoOff, Crosshair, Mic, Volume2, Settings, PictureInPicture, Signal, Users, SlidersHorizontal, Check, Play, Square, Zap, Box, Trash2 } from 'lucide-react'
+import { Maximize, Camera as CameraIcon, Video, VideoOff, Crosshair, Mic, Volume2, Settings, PictureInPicture, Signal, Users, SlidersHorizontal, Check, Play, Square, Zap, Box, Trash2, UserCheck } from 'lucide-react'
 import { memo, useEffect, useState, useRef } from 'react'
 import { cn } from '@/utils/utils'
 import { motion } from 'framer-motion'
 import { VideoPlayer } from './VideoPlaceholder'
+import { AnalyticsOverlay } from './AnalyticsOverlay'
 import { useAppStore } from '@/store/useAppStore'
 import { useToastStore } from '@/store/useToastStore'
 import { useCameraStateStore } from '@/store/useCameraStateStore'
@@ -20,6 +21,17 @@ export const CameraCard = memo(({ id, name, location, pipelineStatus: parentPipe
     for (const event of events) {
       if (event.event_type === "PERSON_COUNT") {
         return event.metadata?.current_people_in_frame || 0;
+      }
+    }
+    return 0;
+  })
+
+  const totalPeopleCount = useCameraStateStore(state => {
+    const events = state.states[id]?.events?.PeopleCountingPlugin;
+    if (!events) return 0;
+    for (const event of events) {
+      if (event.event_type === "PERSON_COUNT") {
+        return event.metadata?.total_unique_people_seen || 0;
       }
     }
     return 0;
@@ -211,7 +223,7 @@ export const CameraCard = memo(({ id, name, location, pipelineStatus: parentPipe
             >
               <Trash2 className="w-3 h-3" /> DEL
             </button>
-            <div className="flex items-center gap-1.5 text-[10px] bg-background/60 border border-foreground/10 px-2 py-1 rounded backdrop-blur-sm text-white font-mono shadow-md pointer-events-auto">
+            <div className="flex items-center gap-1.5 text-[10px] bg-background/60 border border-foreground/10 px-2 py-1 rounded backdrop-blur-sm text-white font-mono shadow-md pointer-events-auto" title="Current People in Frame">
               <Users className="w-3 h-3 text-primary" />
               <span className="font-semibold text-gray-300">CW:</span>
               <span className={cn(
@@ -221,6 +233,16 @@ export const CameraCard = memo(({ id, name, location, pipelineStatus: parentPipe
                 {personCount}
               </span>
             </div>
+
+            {totalPeopleCount > 0 && (
+              <div className="flex items-center gap-1.5 text-[10px] bg-background/60 border border-foreground/10 px-2 py-1 rounded backdrop-blur-sm text-white font-mono shadow-md pointer-events-auto" title="Total Unique People Counted">
+                <UserCheck className="w-3 h-3 text-emerald-400" />
+                <span className="font-semibold text-gray-300">TOT:</span>
+                <span className="font-bold text-emerald-400">
+                  {totalPeopleCount}
+                </span>
+              </div>
+            )}
             
             {cartonCount > 0 && (
               <div className="flex items-center gap-1.5 text-[10px] bg-background/60 border border-foreground/10 px-2 py-1 rounded backdrop-blur-sm text-white font-mono shadow-md pointer-events-auto">
@@ -238,10 +260,13 @@ export const CameraCard = memo(({ id, name, location, pipelineStatus: parentPipe
       </div>
 
       {/* Video Content */}
-      <div className="relative w-full h-full">
+      <div className="relative w-full h-full overflow-hidden">
         {pipelineStatus !== 'Stopped' ? (
           isVisible ? (
-            <VideoPlayer cameraId={id} streamUrl="mock" poster="https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=800&q=80" />
+            <>
+              <VideoPlayer cameraId={id} streamUrl="mock" poster="https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=800&q=80" />
+              <AnalyticsOverlay cameraId={id} />
+            </>
           ) : (
             <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black text-foreground/30">
               <VideoOff className="w-8 h-8 mb-2 opacity-50" />
