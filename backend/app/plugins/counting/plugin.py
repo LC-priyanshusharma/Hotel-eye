@@ -114,14 +114,6 @@ class PeopleCountingPlugin(BaseDetectionPlugin):
                         "type": "line",
                         "coords": [[line_x_start, line_y], [line_x_end, line_y]],
                         "color": [0, 255, 255], # Yellow line
-                        "thickness": 3
-                    },
-                    {
-                        "type": "text",
-                        "text": "Door / Black Tile",
-                        "coords": [line_x_start, line_y - 10],
-                        "color": [0, 255, 255],
-                        "scale": 0.6,
                         "thickness": 2
                     }
                 ]
