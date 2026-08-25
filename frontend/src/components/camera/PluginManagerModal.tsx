@@ -19,9 +19,11 @@ const PLUGIN_METRICS: Record<string, any> = {
 
 export const PluginManagerModal = memo(({ cameraId, isOpen, onClose }: { cameraId: string, isOpen: boolean, onClose: () => void }) => {
   const [allowedPlugins, setAllowedPlugins] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   useEffect(() => {
     if (!isOpen) return;
+    setIsLoading(true);
     api.get(`/api/config?t=${Date.now()}`)
       .then(res => res.data)
       .then(data => {
@@ -29,13 +31,15 @@ export const PluginManagerModal = memo(({ cameraId, isOpen, onClose }: { cameraI
         if (plugins && Array.isArray(plugins)) {
           setAllowedPlugins(plugins);
         } else {
-          setAllowedPlugins([]);
+          // By default all discovered plugins are running
+          setAllowedPlugins(Object.keys(PLUGIN_METRICS));
         }
       })
       .catch(err => {
         console.error("Failed to fetch config plugins:", err);
-        setAllowedPlugins([]);
-      });
+        setAllowedPlugins(Object.keys(PLUGIN_METRICS));
+      })
+      .finally(() => setIsLoading(false));
   }, [cameraId, isOpen]);
 
   const togglePlugin = (pluginName: string) => {
@@ -49,6 +53,8 @@ export const PluginManagerModal = memo(({ cameraId, isOpen, onClose }: { cameraI
     setAllowedPlugins(newPlugins);
     api.post('/api/config', {
       updates: { CAMERA_PLUGINS: { [cameraId]: newPlugins } }
+    }).catch(err => {
+      console.error("Failed to persist plugin update:", err);
     });
   };
 

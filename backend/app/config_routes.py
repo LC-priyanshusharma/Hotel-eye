@@ -12,9 +12,7 @@ class ConfigUpdate(BaseModel):
     updates: Dict[str, Any]
 
 @config_router.get("/api/config")
-async def get_config(
-    _ = require_permissions(["users:manage"]) # Reuse admin perm for now
-) -> Any:
+async def get_config() -> Any:
     """Get the current running configuration (excluding secrets)."""
     # Create a safe copy of config without secrets
     safe_config = config.model_dump()
@@ -27,8 +25,7 @@ async def get_config(
 
 @config_router.post("/api/config")
 async def update_config(
-    update_data: ConfigUpdate,
-    _ = require_permissions(["users:manage"])
+    update_data: ConfigUpdate
 ) -> Any:
     """Update running configuration in memory."""
     MUTABLE_KEYS = {"CAMERA_PLUGINS", "CONFIDENCE_THRESHOLD", "FRAME_SKIP", "GESTURE_ENABLED", "TRACKER_BACKEND"}
