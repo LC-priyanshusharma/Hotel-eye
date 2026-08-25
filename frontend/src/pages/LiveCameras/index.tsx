@@ -204,11 +204,20 @@ export function LiveCameras() {
         <div className="flex-1 overflow-y-auto p-2 flex flex-col relative">
           {activeCameraId && (
             <div className="absolute inset-0 z-20 p-4 flex items-center justify-center bg-background/95 backdrop-blur-sm">
-              <div className="w-full h-full max-w-7xl">
-                {cameras.filter(c => c.id === activeCameraId).map(cam => (
-                  <CameraCard key={`active-${cam.id}`} {...cam} pipelineStatus={pipelineStatuses[cam.id] || "Stopped"} />
-                ))}
-              </div>
+              {cameras.filter(c => c.id === activeCameraId).map(cam => {
+                const isPortrait = cam.name === "3" || cam.name.includes("3") || cam.name.toLowerCase().includes("whatsapp") || cam.id === "f687142d-c4d7-4944-ac95-484f831e0eb4";
+                return (
+                  <div 
+                    key={`active-${cam.id}`} 
+                    className={cn(
+                      "w-full h-full flex items-center justify-center",
+                      isPortrait ? "max-h-[82vh] aspect-[9/16] max-w-[calc(82vh*9/16)]" : "max-w-7xl"
+                    )}
+                  >
+                    <CameraCard {...cam} pipelineStatus={pipelineStatuses[cam.id] || "Stopped"} />
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -219,17 +228,21 @@ export function LiveCameras() {
                 gridTemplateColumns: `repeat(${activeLayout.cols}, minmax(0, 1fr))`
               }}
             >
-              {cameras.map((cam) => (
-                <div 
-                  key={cam.id} 
-                  className={cn(
-                    "w-full rounded-2xl overflow-hidden shadow-lg border border-border/40 transition-transform duration-150",
-                    activeLayout.cols === 1 ? "h-[75vh]" : activeLayout.cols === 2 ? "h-[380px]" : activeLayout.cols === 3 ? "h-[290px]" : "h-[220px]"
-                  )}
-                >
-                  <CameraCard {...cam} pipelineStatus={pipelineStatuses[cam.id] || "Stopped"} />
-                </div>
-              ))}
+              {cameras.map((cam) => {
+                const isPortrait = cam.name === "3" || cam.name.includes("3") || cam.name.toLowerCase().includes("whatsapp") || cam.id === "f687142d-c4d7-4944-ac95-484f831e0eb4";
+                return (
+                  <div 
+                    key={cam.id} 
+                    className={cn(
+                      "w-full rounded-2xl overflow-hidden shadow-lg border border-border/40 transition-transform duration-150",
+                      isPortrait && activeLayout.cols >= 3 ? "aspect-[9/16]" :
+                      activeLayout.cols === 1 ? "h-[75vh]" : activeLayout.cols === 2 ? "h-[380px]" : activeLayout.cols === 3 ? "h-[290px]" : "h-[220px]"
+                    )}
+                  >
+                    <CameraCard {...cam} pipelineStatus={pipelineStatuses[cam.id] || "Stopped"} />
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
