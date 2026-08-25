@@ -21,65 +21,66 @@ def ds_consumer(result_queue: queue.Queue):
     pubsub = redis_client.pubsub()
     pubsub.subscribe("inference_result_ds")
     
-    engine = DetectionEngine()
-    
     for message in pubsub.listen():
         if message["type"] == "message":
             try:
-                # DeepStream minimal JSON parse
                 ds_data = json.loads(message["data"])
-                
-                # NvMsgConv format varies, let's assume it provides objects
-                # We extract bounding boxes and feed into our DetectionEngine
-                # This logic translates DeepStream JSON into LogicEye's expected format
-                camera_id = ds_data.get("sensor", {}).get("id", "camera1")
-                
-                objects = ds_data.get("object", [])
+                camera_id = ds_data.get("camera_id") or ds_data.get("sensor", {}).get("id", "camera1")
+                events = ds_data.get("events")
                 
                 from app.engine.base import NormalizedDetection
                 
-                detections = []
-                for obj in objects:
-                    bbox = obj.get("bbox", {})
-                    x = bbox.get("left", 0.0)
-                    y = bbox.get("top", 0.0)
-                    w = bbox.get("width", 0.0)
-                    h = bbox.get("height", 0.0)
+                # If events are already processed by DeepStream's in-pipeline plugin engine
+                if events is not None:
+                    raw_dets = ds_data.get("detections", [])
+                    detections = [
+                        NormalizedDetection(
+                            class_id=int(d.get("class_id", 0)),
+                            confidence=float(d.get("confidence", 1.0)),
+                            bbox=[float(b) for b in d.get("bbox", [0, 0, 0, 0])],
+                            track_id=int(d["track_id"]) if d.get("track_id") is not None else None
+                        )
+                        for d in raw_dets
+                    ]
+                else:
+                    objects = ds_data.get("object", [])
+                    detections = []
+                    for obj in objects:
+                        bbox = obj.get("bbox", {})
+                        x = bbox.get("left", 0.0)
+                        y = bbox.get("top", 0.0)
+                        w = bbox.get("width", 0.0)
+                        h = bbox.get("height", 0.0)
+                        track_id = obj.get("object_id")
+                        cls_id = obj.get("class_id", 0) 
+                        conf = obj.get("confidence", 1.0)
+                        
+                        det = NormalizedDetection(
+                            class_id=int(cls_id),
+                            confidence=float(conf),
+                            bbox=[float(x), float(y), float(x+w), float(y+h)],
+                            track_id=int(track_id) if track_id is not None else None
+                        )
+                        detections.append(det)
                     
-                    # NvTracker outputs object_id when tracking is enabled
-                    track_id = obj.get("object_id")
-                    
-                    # class_id is typically provided by nvmsgconv
-                    cls_id = obj.get("class_id", 0) 
-                    conf = obj.get("confidence", 1.0)
-                    
-                    det = NormalizedDetection(
-                        class_id=int(cls_id),
-                        confidence=float(conf),
-                        bbox=[float(x), float(y), float(x+w), float(y+h)],
-                        track_id=int(track_id) if track_id is not None else None
+                    frame_data = FrameData(
+                        frame=None,
+                        detections=detections,
+                        camera_id=camera_id,
+                        timestamp=time.time(),
+                        faces=[],
+                        camera_url=camera_id
                     )
-                    detections.append(det)
-                
-                frame_data = FrameData(
-                    frame=None, # No frame available from DeepStream over Redis natively
-                    detections=detections,
-                    camera_id=camera_id,
-                    timestamp=time.time(),
-                    faces=[],
-                    camera_url=camera_id
-                )
-                
-                events = engine.run_plugins(frame_data)
+                    events = engine.run_plugins(frame_data)
                 
                 packet = {
                     "camera_id": camera_id,
                     "frame": None,
                     "detections": detections,
                     "events": events,
-                    "fps": 30.0,
+                    "fps": float(ds_data.get("fps", 30.0)),
                     "latency_ms": 0,
-                    "timestamp": time.time()
+                    "timestamp": float(ds_data.get("timestamp", time.time()))
                 }
                 
                 if result_queue.full():

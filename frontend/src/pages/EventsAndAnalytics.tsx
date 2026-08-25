@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react'
 import { Activity, Calendar, Camera, Cpu, Download, Filter, HardDrive, Network, Search, Server, ShieldAlert, Zap } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { cn } from '@/utils/utils'
+import { api } from '@/api/api'
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ScatterChart, Scatter, ZAxis } from 'recharts'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
 import { staggerContainer, fadeInUp } from '@/utils/animations'
+import { useCameraStateStore } from '@/store/useCameraStateStore'
 
 function KPICard({ title, value, subValue, icon: Icon, trend, colorClass }: any) {
   return (
@@ -38,6 +40,7 @@ function KPICard({ title, value, subValue, icon: Icon, trend, colorClass }: any)
 }
 
 export function Analytics() {
+  const states = useCameraStateStore(state => state.states)
   const [data, setData] = useState<any>(null)
   const [activeTab, setActiveTab] = useState('All Events')
   const [timelineData, setTimelineData] = useState<any[]>([])
@@ -45,16 +48,16 @@ export function Analytics() {
   useEffect(() => {
     const fetchKPIs = async () => {
       try {
-        const res = await fetch('/analytics/dashboard')
-        if (res.ok) setData(await res.json())
+        const res = await api.get('/analytics/dashboard')
+        if (res.data) setData(res.data)
       } catch (err) {}
     }
     
     const fetchTimeline = async () => {
       try {
-        const res = await fetch('/events')
-        if (res.ok) {
-          const events = await res.json()
+        const res = await api.get('/events')
+        if (res.data && Array.isArray(res.data)) {
+          const events = res.data
           // Aggregate events by hour/minute buckets
           const buckets: Record<string, number> = {}
           events.forEach((ev: any) => {
@@ -63,16 +66,21 @@ export function Analytics() {
              buckets[timeStr] = (buckets[timeStr] || 0) + 1
           })
           const chartData = Object.entries(buckets).map(([time, count]) => ({ time, detections: count })).sort((a, b) => a.time.localeCompare(b.time))
-          setTimelineData(chartData.length > 0 ? chartData : [{ time: '—', detections: 0 }])
+          setTimelineData(chartData.length > 0 ? chartData : [{ time: '—', detections: 0 }].map(obj => ({...obj})))
         }
       } catch (err) {}
     }
     
     fetchKPIs()
     fetchTimeline()
-    const int = setInterval(() => { fetchKPIs(); fetchTimeline() }, 5000)
-    return () => clearInterval(int)
   }, [])
+  
+  useEffect(() => {
+    if (states) {
+      // Re-fetch dashboard stats on state update
+      api.get('/analytics/dashboard').then(res => { if (res.data) setData(res.data) }).catch(() => {})
+    }
+  }, [states]);
 
   if (!data) return <div className="p-8 flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>
 
@@ -85,9 +93,9 @@ export function Analytics() {
       doc.setFontSize(11)
       doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 30)
       
-      const res = await fetch('/events')
-      if (res.ok) {
-        const events = await res.json()
+      const res = await api.get('/events')
+      if (res.data && Array.isArray(res.data)) {
+        const events = res.data
         const tableData = events.slice(0, 100).map((ev: any) => [
           ev.timestamp?.replace('T', ' '),
           ev.camera_id,
@@ -225,6 +233,7 @@ function DatabaseIcon(props: any) {
 
 
 export function Events({ filter = 'All Events' }: { filter?: string }) {
+  const states = useCameraStateStore(state => state.states)
   const [events, setEvents] = useState<any[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [startDate, setStartDate] = useState('')
@@ -233,9 +242,9 @@ export function Events({ filter = 'All Events' }: { filter?: string }) {
   useEffect(() => {
     const fetchEvents = async () => {
       try {
-        const res = await fetch('/events')
-        if (res.ok) {
-          const allEvents = await res.json()
+        const res = await api.get('/events')
+        if (res.data && Array.isArray(res.data)) {
+          const allEvents = res.data
           
           // Apply frontend filtering based on active tab
           const filtered = allEvents.filter((ev: any) => {
@@ -253,9 +262,35 @@ export function Events({ filter = 'All Events' }: { filter?: string }) {
       } catch (err) {}
     }
     fetchEvents()
-    const int = setInterval(fetchEvents, 2000)
-    return () => clearInterval(int)
   }, [filter])
+  
+  useEffect(() => {
+    if (states) {
+       // Auto-refresh when live events happen
+       let hasEvents = false;
+       Object.values(states || {}).forEach((s: any) => {
+          if (Object.keys(s.events || {}).length > 0) hasEvents = true;
+       });
+       if (hasEvents) {
+          api.get('/events')
+            .then(res => {
+              if (res.data && Array.isArray(res.data)) {
+                const filtered = res.data.filter((ev: any) => {
+                  const desc = ev.description?.toUpperCase() || "";
+                  if (filter === 'All Events') return true
+                  if (filter === 'Attendance') return desc.includes('CHECK IN') || desc.includes('CHECK OUT')
+                  if (filter === 'Person Count') return desc.includes('PERSON COUNT')
+                  if (filter === 'Intrusions') return desc.includes('INTRUSION')
+                  if (filter === 'Safety Alerts') return desc.includes('FIRE')
+                  return true
+                })
+                setEvents(filtered)
+              }
+            })
+            .catch(() => {})
+       }
+    }
+  }, [states, filter]);
 
   const displayEvents = events.filter((ev) => {
     if (searchQuery) {

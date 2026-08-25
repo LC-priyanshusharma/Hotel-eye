@@ -99,11 +99,19 @@ export function Settings() {
     }
   }
 
+  const [selectedPlugins, setSelectedPlugins] = useState<string[]>([])
+
+  const togglePluginSelection = (pluginId: string) => {
+    setSelectedPlugins(prev => 
+      prev.includes(pluginId) ? prev.filter(id => id !== pluginId) : [...prev, pluginId]
+    )
+  }
+
   const handleAddCamera = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!cameraName) return
     if (sourceType === 'rtsp' && !rtspUrl) return
-    if (sourceType === 'video_file' && !videoFile) return
+    if (sourceType === 'video_file' && !videoFile && !rtspUrl) return
 
     setIsSubmitting(true)
     try {
@@ -126,10 +134,21 @@ export function Settings() {
       })
 
       if (res.status === 200) {
+        const newCamId = res.data?.camera_id
+        if (newCamId && selectedPlugins.length > 0) {
+          try {
+            await api.post('/api/config', {
+              updates: { CAMERA_PLUGINS: { [newCamId]: selectedPlugins } }
+            })
+          } catch (err) {
+            console.error('Failed to set initial camera plugins:', err)
+          }
+        }
         addToast({ title: 'Camera Added', message: `Successfully connected to ${cameraName}`, type: 'success' })
         setCameraName('')
         setRtspUrl('')
         setVideoFile(null)
+        setSelectedPlugins([])
       } else {
         throw new Error('Failed to add camera')
       }
@@ -159,7 +178,7 @@ export function Settings() {
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-8 relative z-10">
         <div className="col-span-1 flex flex-col gap-2">
-          {['General', 'Cameras', 'Streaming', 'AI Models', 'Video', 'Audio', 'Recording', ...(isAdmin ? ['Users & Roles'] : [])].map((tab) => (
+          {['General', 'Cameras', ...(isAdmin ? ['Users & Roles'] : [])].map((tab) => (
             <button 
               key={tab} 
               onClick={() => setActiveTab(tab)}
@@ -322,17 +341,79 @@ export function Settings() {
                   )}
 
                   {sourceType === 'video_file' && (
-                    <div className="flex flex-col gap-2">
-                      <label className="text-sm font-medium text-foreground">Video File</label>
-                      <input 
-                        type="file"
-                        accept="video/mp4,video/avi"
-                        onChange={(e) => setVideoFile(e.target.files?.[0] || null)}
-                        className="bg-background border border-border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 w-full text-sm"
-                        required
-                      />
+                    <div className="flex flex-col gap-3">
+                      <div className="flex flex-col gap-2">
+                        <label className="text-sm font-medium text-foreground">Upload Video File</label>
+                        <input 
+                          type="file"
+                          accept="video/mp4,video/avi,video/mkv,video/mov"
+                          onChange={(e) => {
+                            setVideoFile(e.target.files?.[0] || null)
+                            if (e.target.files?.[0]) setRtspUrl('')
+                          }}
+                          className="bg-background border border-border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 w-full text-sm"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="h-px bg-border flex-1" />
+                        <span className="text-xs text-muted-foreground uppercase">OR</span>
+                        <div className="h-px bg-border flex-1" />
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <label className="text-sm font-medium text-foreground">Local Video File Path</label>
+                        <input 
+                          type="text" 
+                          value={rtspUrl}
+                          onChange={(e) => {
+                            setRtspUrl(e.target.value)
+                            if (e.target.value) setVideoFile(null)
+                          }}
+                          placeholder="/path/to/local/video.mp4 or videos/sample.mp4" 
+                          className="bg-background border border-border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/50 w-full font-mono text-sm" 
+                        />
+                        <p className="text-xs text-muted-foreground">Path to any local video file on the host machine.</p>
+                      </div>
                     </div>
                   )}
+
+                  <div className="flex flex-col gap-2 pt-2 border-t border-border/50">
+                    <div className="flex justify-between items-center">
+                      <label className="text-sm font-medium text-foreground">Select Analytics (Optional)</label>
+                      <span className="text-xs text-muted-foreground">{selectedPlugins.length} selected</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 max-h-44 overflow-y-auto pr-1 custom-scrollbar">
+                      {[
+                        { id: "IntrusionDetectionPlugin", label: "Intrusion Detection" },
+                        { id: "PPEDetectionPlugin", label: "PPE Safety" },
+                        { id: "FireDetectionPlugin", label: "Fire & Smoke" },
+                        { id: "ANPRPlugin", label: "ANPR Plate" },
+                        { id: "PeopleCountingPlugin", label: "People Counting" },
+                        { id: "ParkingAnalyticsPlugin", label: "Parking" },
+                        { id: "AttendanceDetectionPlugin", label: "Face Attendance" },
+                        { id: "VisitorPlugin", label: "Visitor & VIP" },
+                        { id: "CartonCountingPlugin", label: "Carton Counting" },
+                        { id: "RestrictionZonePlugin", label: "Restriction Zone" },
+                      ].map((p) => {
+                        const isSelected = selectedPlugins.includes(p.id)
+                        return (
+                          <button
+                            type="button"
+                            key={p.id}
+                            onClick={() => togglePluginSelection(p.id)}
+                            className={cn(
+                              "text-xs px-2.5 py-2 rounded-lg border text-left font-medium transition-all flex items-center justify-between",
+                              isSelected 
+                                ? "bg-primary/20 border-primary text-primary shadow-sm" 
+                                : "bg-background/60 border-border text-muted-foreground hover:text-foreground hover:border-foreground/20"
+                            )}
+                          >
+                            <span className="truncate">{p.label}</span>
+                            <span className={cn("w-2 h-2 rounded-full shrink-0 ml-1.5", isSelected ? "bg-primary glow-primary" : "bg-muted")} />
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
 
                   <button 
                     type="submit" 

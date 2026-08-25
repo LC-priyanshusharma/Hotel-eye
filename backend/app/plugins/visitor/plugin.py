@@ -61,7 +61,7 @@ class VisitorPlugin(BaseDetectionPlugin):
             
         camera_id = frame_data.camera_id
         timestamp = frame_data.timestamp
-        h, w = frame_data.frame.shape[:2]
+        h, w = frame_data.frame.shape[:2] if frame_data.frame is not None else (720, 1280)
         line_y = int(h * 0.5) # The physical tripwire line at 50% height
         
         person_tracks = []

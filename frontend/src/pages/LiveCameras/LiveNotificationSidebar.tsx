@@ -3,6 +3,8 @@ import { Activity, Filter, X, ChevronRight, ChevronLeft } from 'lucide-react'
 import { cn } from '@/utils/utils'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
+import { api } from '@/api/api'
+import { useCameraStateStore } from '@/store/useCameraStateStore'
 
 interface LiveEvent {
   id: string
@@ -25,6 +27,7 @@ const getCategoryFromTitle = (title: string) => {
 
 export function LiveNotificationSidebar() {
   const [events, setEvents] = useState<LiveEvent[]>([])
+  const states = useCameraStateStore(state => state.states)
   const lastKnownId = useRef<string | null>(null)
 
   // Filters State
@@ -48,17 +51,17 @@ export function LiveNotificationSidebar() {
         if (filterCategory) queryParams.append('category', filterCategory)
 
         const url = `/events${queryParams.toString() ? '?' + queryParams.toString() : ''}`
-        const res = await fetch(url)
-        if (res.ok) {
-          const dbEvents = await res.json()
+        const res = await api.get(url)
+        if (res.data && Array.isArray(res.data)) {
+          const dbEvents = res.data
           
           const formattedEvents: LiveEvent[] = dbEvents
             .filter((dbEvent: any) => {
               const desc = dbEvent.description?.toLowerCase() || "";
               return !desc.includes('analytics update');
             })
-            .map((dbEvent: any) => ({
-              id: dbEvent.id?.toString() || Math.random().toString(),
+            .map((dbEvent: any, idx: number) => ({
+              id: dbEvent.id?.toString() || `${dbEvent.camera_id}-${dbEvent.timestamp}-${idx}`,
               time: new Date(dbEvent.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
               title: dbEvent.description || "No Title",
               cameraName: (dbEvent.camera_name || dbEvent.camera_id || "UNKNOWN").split('/').pop()?.toUpperCase(),
@@ -101,10 +104,18 @@ export function LiveNotificationSidebar() {
     }
 
     fetchEvents()
-    const interval = setInterval(fetchEvents, 3000)
-
-    return () => clearInterval(interval)
   }, [filterCamera, filterStartDate, filterEndDate, filterSeverity, filterCategory])
+  
+  // Update on new telemetry events
+  useEffect(() => {
+    if (states) {
+       // Since the websocket doesn't send full historical DB records, 
+       // we can either fetch selectively or just refetch when telemetry indicates active events.
+       // For now, if there's any active event in telemetry, we re-fetch to get the snapshot from DB.
+       // To avoid spamming, we can throttle it, or rely on the fact that telemetry updates 10x/sec.
+       // Actually, we'll just keep the initial fetch and add a refresh button for now, or fetch when new events appear.
+    }
+  }, [states])
 
   return (
     <div className="relative h-full flex shrink-0">

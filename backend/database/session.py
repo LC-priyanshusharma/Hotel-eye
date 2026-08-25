@@ -5,8 +5,9 @@ from config.config import config
 
 # SQLAlchemy Synchronous Engine
 # We use standard pooling since our background worker handles the DB writes.
+sync_db_url = config.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://").replace("sqlite+aiosqlite:///", "sqlite:///")
 engine = create_engine(
-    config.DATABASE_URL, 
+    sync_db_url, 
     pool_size=5, 
     max_overflow=10,
     pool_pre_ping=True
@@ -25,7 +26,7 @@ def get_db():
 # SQLAlchemy Asynchronous Engine (For new Auth / Web endpoints)
 # Convert sqlite:/// URL to sqlite+aiosqlite:///
 async_db_url = config.DATABASE_URL.replace("sqlite:///", "sqlite+aiosqlite:///")
-if "postgres" in async_db_url:
+if "postgres" in async_db_url and "asyncpg" not in async_db_url:
     async_db_url = async_db_url.replace("postgresql://", "postgresql+asyncpg://")
 
 async_engine = create_async_engine(

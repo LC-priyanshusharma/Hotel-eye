@@ -1,4 +1,7 @@
-import React, { memo, useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
+import { cn } from '@/utils/utils'
+import { webrtcStreamManager } from '@/services/webrtcStreamManager'
+import { VideoOff, RefreshCw, Signal, Activity } from 'lucide-react'
 
 export interface VideoPlayerProps {
   cameraId: string
@@ -10,141 +13,101 @@ export interface VideoPlayerProps {
 
 export const VideoPlayer = memo(({ cameraId, poster, loading, error }: VideoPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const posterImgRef = useRef<HTMLImageElement>(null);
-  
-  const [retryCount, setRetryCount] = useState(0);
-  const [isWsConnecting, setIsWsConnecting] = useState(true);
   const [hasFirstFrame, setHasFirstFrame] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<string | null>(null);
 
   useEffect(() => {
     if (loading || error) return;
-    
-    setIsWsConnecting(true);
-    let pc: RTCPeerConnection | null = null;
-    let isActive = true;
+    setConnectionStatus(null);
 
-    const connectWebRTC = async () => {
-      try {
-        pc = new RTCPeerConnection();
-        
-        pc.addTransceiver('video', { direction: 'recvonly' });
-        // Optional: add audio if available
-        // pc.addTransceiver('audio', { direction: 'recvonly' });
-
-        pc.ontrack = (event) => {
-          if (!isActive) return;
-          if (videoRef.current) {
-            videoRef.current.srcObject = event.streams[0];
-            setIsWsConnecting(false);
-          }
-        };
-
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-
-        // MediaMTX WHEP Endpoint
-        // Default to Jetson public IP if running on localhost
-        let host = window.location.hostname;
-        if (host === 'localhost' || host === '127.0.0.1') {
-          host = '106.201.231.217';
-        }
-        const whepUrl = `http://${host}:8189/${encodeURIComponent(cameraId)}/whep`;
-
-        const response = await fetch(whepUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/sdp'
-          },
-          body: pc.localDescription?.sdp
-        });
-
-        if (!response.ok) {
-          throw new Error(`WHEP connection failed: ${response.statusText}`);
-        }
-
-        const answerSdp = await response.text();
-        if (!isActive) return;
-
-        await pc.setRemoteDescription(new RTCSessionDescription({
-          type: 'answer',
-          sdp: answerSdp
-        }));
-
-      } catch (err) {
-        console.error(`WebRTC connection error for ${cameraId}:`, err);
-        if (isActive) {
-          setIsWsConnecting(true);
-          // Auto-reconnect
-          if (retryCount < 5) {
-            const timeout = Math.min(1000 * Math.pow(2, retryCount), 10000);
-            setTimeout(() => {
-              if (isActive) setRetryCount(prev => prev + 1);
-            }, timeout);
-          }
-        }
+    const unsubscribe = webrtcStreamManager.subscribe(cameraId, (stream, err) => {
+      if (err) {
+        setConnectionStatus(err);
+        return;
       }
-    };
 
-    connectWebRTC();
+      if (stream && videoRef.current) {
+        if (videoRef.current.srcObject !== stream) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(() => {});
+        }
+        setHasFirstFrame(true);
+        setConnectionStatus(null);
+      }
+    });
 
     return () => {
-      isActive = false;
-      if (pc) {
-        pc.close();
-      }
+      unsubscribe();
     };
-  }, [cameraId, retryCount, loading, error]);
+  }, [cameraId, loading, error]);
 
-  if (error) {
-    return (
-      <div className="w-full h-full relative bg-danger/10 flex flex-col items-center justify-center p-4">
-        <span className="text-danger font-bold text-sm tracking-widest text-center">{error}</span>
-      </div>
-    )
-  }
-
-  if (loading || (isWsConnecting && !hasFirstFrame)) {
-    return (
-      <div className="w-full h-full relative bg-black flex flex-col items-center justify-center p-4 animate-pulse">
-        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mb-4" />
-        <span className="text-foreground/50 font-mono text-xs tracking-widest uppercase">
-          {loading ? "Initializing Stream" : "Connecting WebRTC..."}
-        </span>
-        
-        {/* Hidden video element to capture the first frame behind the loader */}
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          onPlay={() => setHasFirstFrame(true)}
-          className="absolute inset-0 w-full h-full object-cover opacity-0"
-        />
-      </div>
-    )
-  }
+  const isOffline = error || connectionStatus;
 
   return (
-    <div className="w-full h-full relative bg-black flex items-center justify-center overflow-hidden">
+    <div className="w-full h-full relative bg-zinc-950 flex items-center justify-center overflow-hidden">
       {/* Poster fallback */}
       {poster && !hasFirstFrame && (
         <img 
-          ref={posterImgRef}
           src={poster} 
-          className="absolute inset-0 w-full h-full object-cover opacity-30" 
+          className="absolute inset-0 w-full h-full object-contain opacity-10" 
           alt={`Poster for ${cameraId}`}
         />
       )}
       
-      {/* Hardware-accelerated WebRTC video */}
+      {/* Persistent hardware-accelerated video element with true aspect ratio preservation */}
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted
-        onPlay={() => setHasFirstFrame(true)}
-        className="w-full h-full object-cover"
+        onLoadedData={() => setHasFirstFrame(true)}
+        onPlaying={() => setHasFirstFrame(true)}
+        className={cn(
+          "w-full h-full object-contain transition-opacity duration-300",
+          hasFirstFrame && !isOffline ? "opacity-100" : "opacity-0"
+        )}
       />
+
+      {/* Standby / Connecting / Offline HUD */}
+      {(!hasFirstFrame || isOffline) && (
+        <div className="absolute inset-0 z-10 bg-zinc-950/95 flex flex-col items-center justify-center p-4 text-center select-none">
+          <div className="relative mb-4 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-full border border-primary/30 flex items-center justify-center animate-pulse">
+              <Activity className="w-6 h-6 text-primary/70" />
+            </div>
+            <span className="absolute -top-1 -right-1 flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500" />
+            </span>
+          </div>
+
+          <span className="text-white font-mono text-xs tracking-widest uppercase font-semibold mb-1">
+            {loading ? "Initializing Stream..." : isOffline ? "RTSP Stream Standby" : "Connecting WebRTC..."}
+          </span>
+          <span className="text-muted-foreground/70 font-mono text-[10px] tracking-wider max-w-xs mb-3">
+            {isOffline ? "Awaiting camera connection or RTSP stream broadcast" : "Establishing peer connection with MediaMTX"}
+          </span>
+
+          <button 
+            onClick={() => {
+              setConnectionStatus(null);
+              webrtcStreamManager.closeStream(cameraId);
+              webrtcStreamManager.subscribe(cameraId, (stream) => {
+                if (stream && videoRef.current) {
+                  videoRef.current.srcObject = stream;
+                  videoRef.current.play().catch(() => {});
+                  setHasFirstFrame(true);
+                }
+              });
+            }}
+            className="flex items-center gap-1.5 px-3 py-1 bg-primary/20 hover:bg-primary/30 border border-primary/40 rounded-lg text-[11px] text-primary transition-all font-mono shadow-sm hover:scale-105"
+          >
+            <RefreshCw className="w-3 h-3" /> Reconnect
+          </button>
+        </div>
+      )}
     </div>
-  )
-})
+  );
+});
+
+VideoPlayer.displayName = 'VideoPlayer';

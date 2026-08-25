@@ -46,22 +46,9 @@ class RedisEventBus(IEventBus):
                             logger.error(f"Failed to decode Redis message: {e}")
         return results
 
-    def create_group_if_not_exists(self, channel: str, group_name: str) -> None:
-        try:
-            self.client.xgroup_create(channel, group_name, id='0', mkstream=True)
-        except Exception as e:
-            if "BUSYGROUP" not in str(e):
-                pass
-
     def subscribe_group(self, group_name: str, consumer_name: str, channel: str, count: int = 10, block: int = 100) -> List[Any]:
         streams = {channel: ">"}
-        try:
-            messages = self.client.xreadgroup(group_name, consumer_name, streams, count=count, block=block)
-        except redis.exceptions.ResponseError as e:
-            if "NOGROUP" in str(e):
-                self.create_group_if_not_exists(channel, group_name)
-                return []
-            raise e
+        messages = self.client.xreadgroup(group_name, consumer_name, streams, count=count, block=block)
         
         results = []
         if messages:

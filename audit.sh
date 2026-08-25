@@ -62,7 +62,7 @@ apt-cache search python3.*nvinfer
 echo ""
 
 echo "=== PHASE 3 & 4: NVIDIA CONTAINER AUDIT ==="
-sudo docker run --rm --runtime=nvidia nvcr.io/nvidia/l4t-pytorch:r32.7.1-pth1.10-py3 sh -c '
+sudo docker run --rm --runtime=nvidia nvcr.io/nvidia/l4t-pytorch:r36.2.0-pth2.1-py3 sh -c '
 echo "--- Python & PyTorch ---"
 python3 --version
 python3 -c "import torch; print(\"PyTorch:\", torch.__version__); print(\"CUDA Version:\", torch.version.cuda); print(\"CUDA Available:\", torch.cuda.is_available());"

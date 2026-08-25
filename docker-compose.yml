@@ -21,6 +21,8 @@ services:
       - "8554:8554"
       - "8189:8189/tcp"
       - "8189:8189/udp"
+      - "8190:8190/udp"
+      - "8191:8191/tcp"
       - "9997:9997"
     volumes:
       - ./mediamtx.yml:/mediamtx.yml

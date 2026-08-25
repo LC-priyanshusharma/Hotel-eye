@@ -1,3 +1,4 @@
+import { useCameraStateStore } from '@/store/useCameraStateStore'
 import { Video, AlertTriangle, Cpu, HardDrive, Network, ShieldCheck, Activity } from 'lucide-react'
 import { MiniChart } from '@/components/analytics/MiniChart'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -28,7 +29,7 @@ function StatCard({ title, value, icon: Icon, trend, color, data }: any) {
           {trend > 0 ? '+' : ''}{trend}%
         </span>
         <div className="w-24 h-8 opacity-70 group-hover:opacity-100 transition-opacity">
-          <MiniChart data={data} color={color} />
+          <MiniChart data={data ? data.map((d: any) => ({...d})) : []} color={color} />
         </div>
       </div>
 
@@ -58,31 +59,40 @@ export function Dashboard() {
     if (arr.length > 15) arr.shift()
   }, [])
 
+  const states = useCameraStateStore(state => state.states);
+
   useEffect(() => {
     setMounted(true)
-    const fetchKPIs = async () => {
+    const fetchInitial = async () => {
       try {
-        const res = await fetch('/analytics/dashboard')
+        const res = await fetch('/analytics/dashboard') // Ensure it maps to /api/analytics/dashboard if needed
         if (res.ok) {
           const d = await res.json()
-          setSysData(d)
-          // Build rolling history from real data
-          pushHistory(cpuHistory.current, d.system_health?.cpu_usage ?? 0)
-          pushHistory(ramHistory.current, d.system_health?.ram_usage ?? 0)
-          pushHistory(alertHistory.current, d.critical_alerts ?? 0)
-          pushHistory(cameraHistory.current, d.total_cameras ?? 0)
-          // Telemetry time-series
-          const now = new Date()
-          const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
-          telemetryHistory.current.push({ time: timeStr, load: d.system_health?.cpu_usage ?? 0, ram: d.system_health?.ram_usage ?? 0 })
-          if (telemetryHistory.current.length > 30) telemetryHistory.current.shift()
+          setSysData((prev: any) => ({ ...prev, ...d }))
         }
       } catch (err) {}
     }
-    fetchKPIs()
-    const int = setInterval(fetchKPIs, 5000)
-    return () => clearInterval(int)
+    fetchInitial()
   }, [])
+
+  useEffect(() => {
+    if (states) {
+      const h: any = undefined; // backend health api removed
+      if (h) {
+          const newCpu = h.cpu_usage ?? 0;
+          const newRam = h.ram_usage ?? 0;
+          pushHistory(cpuHistory.current, newCpu)
+          pushHistory(ramHistory.current, newRam)
+          
+          const now = new Date()
+          const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
+          telemetryHistory.current.push({ time: timeStr, load: newCpu, ram: newRam })
+          if (telemetryHistory.current.length > 30) telemetryHistory.current.shift()
+          
+          setSysData((prev: any) => ({ ...prev, system_health: h }));
+      }
+    }
+  }, [states]);
 
   const stats = [
     { title: "Connected Cameras", value: sysData?.total_cameras ?? 0, icon: Video, trend: 0, color: "var(--color-primary)", data: cameraHistory.current },
@@ -158,7 +168,7 @@ export function Dashboard() {
           <h3 className="text-sm font-bold tracking-widest uppercase mb-6 text-foreground drop-shadow-md">System Telemetry (Live)</h3>
           <div className="flex-1 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={telemetryHistory.current.length > 0 ? telemetryHistory.current : [{ time: '—', load: 0, ram: 0 }]}>
+              <AreaChart data={telemetryHistory.current.length > 0 ? telemetryHistory.current.map(obj => ({...obj})) : [{ time: '—', load: 0, ram: 0 }]}>
                 <defs>
                   <linearGradient id="colorLoad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="var(--color-primary)" stopOpacity={0.3}/>

@@ -58,12 +58,33 @@ async def lifespan(app: FastAPI):
         cameras = repo.get_active_cameras()
         logger.info(f"Found {len(cameras)} active cameras in database.")
         
-        plugins_config = config.CAMERA_PLUGINS
-        
+        from core.ffmpeg_manager import ffmpeg_manager
+        from api.routers.cameras import publish_redis_command
+
         for cam in cameras:
-            # We no longer auto-start cameras on boot.
-            # The user requested to manually start each camera from the Web UI.
-            logger.info(f"Camera loaded (Stopped): {cam.name}. Awaiting manual start.")
+            if getattr(cam, 'active', True):
+                logger.info(f"Auto-resuming active camera stream: {cam.name} ({cam.id})")
+                source = getattr(cam, 'source', cam.rtsp_url)
+                source_type = getattr(cam, 'source_type', 'rtsp')
+                edge_id = getattr(cam, 'edge_id', 'edge-01')
+                
+                is_video = (source_type == 'video_file') or (source and (source.endswith(('.mp4', '.avi', '.mkv', '.mov')) or os.path.exists(source) or source.startswith('file://') or source.startswith('/')))
+                if is_video:
+                    if source.startswith("/home/use/"):
+                        source = source.replace("/home/use/", "/home/user/")
+                    clean_path = source.replace("file://", "")
+                    if not os.path.exists(clean_path):
+                        logger.warning(f"Skipping camera '{cam.name}' ({cam.id}): video file does not exist at '{clean_path}'")
+                        cam.state = "STOPPED"
+                        continue
+                    source = ffmpeg_manager.start_stream(cam.id, source)
+                    
+                cam.state = "Connecting/Offline"
+                publish_redis_command("start_camera", cam.id, edge_id, source)
+            else:
+                cam.state = "STOPPED"
+            
+        db.commit()
     except Exception as e:
         logger.error(f"Failed to load cameras on startup: {e}")
     finally:

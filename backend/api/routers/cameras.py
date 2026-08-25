@@ -83,8 +83,9 @@ def post_camera(camera: CameraInfo, background_tasks: BackgroundTasks):
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
     finally:
         db.close()
-    
-    return {"status": "success", "camera": camera.model_dump()}
+    cam_dict = camera.model_dump()
+    cam_dict["id"] = cam_id
+    return {"status": "success", "camera_id": cam_id, "camera": cam_dict}
 
 @router.put("/{cam_id}")
 def update_camera(cam_id: str, camera: CameraInfo, background_tasks: BackgroundTasks):
@@ -129,8 +130,7 @@ def start_camera(control: CameraControl, background_tasks: BackgroundTasks):
             source_type = getattr(target_cam, 'source_type', 'rtsp')
             edge_id = getattr(target_cam, 'edge_id', 'edge-01')
             
-            # If it's a local video, stream it continuously via FFmpeg to MediaMTX
-            if source_type == 'video_file':
+            if source:
                 source = ffmpeg_manager.start_stream(target_cam.id, source)
                 
             publish_redis_command("start_camera", target_cam.id, edge_id, source)
@@ -153,9 +153,7 @@ def stop_camera(control: CameraControl, background_tasks: BackgroundTasks):
             target_cam.state = "STOPPED"
             db.commit()
             
-            source_type = getattr(target_cam, 'source_type', 'rtsp')
-            if source_type == 'video_file':
-                ffmpeg_manager.stop_stream(target_cam.id)
+            background_tasks.add_task(ffmpeg_manager.stop_stream, target_cam.id)
                 
             edge_id = getattr(target_cam, 'edge_id', 'edge-01')
             publish_redis_command("stop_camera", target_cam.id, edge_id)
@@ -177,9 +175,7 @@ def delete_camera(cam_id: str, background_tasks: BackgroundTasks):
                 edge_id = getattr(target_cam, 'edge_id', 'edge-01')
                 publish_redis_command("stop_camera", target_cam.id, edge_id)
             
-            source_type = getattr(target_cam, 'source_type', 'rtsp')
-            if source_type == 'video_file':
-                ffmpeg_manager.stop_stream(target_cam.id)
+            ffmpeg_manager.stop_stream(target_cam.id)
                 
             db.delete(target_cam)
             db.commit()
@@ -192,7 +188,12 @@ async def _batch_start_cameras(cameras):
     """Controlled concurrency logic to prevent blasting Redis simultaneously."""
     for cam in cameras:
         source = getattr(cam, 'source', cam.rtsp_url)
+        source_type = getattr(cam, 'source_type', 'rtsp')
         edge_id = getattr(cam, 'edge_id', 'edge-01')
+        
+        if source:
+            source = ffmpeg_manager.start_stream(cam.id, source)
+            
         publish_redis_command("start_camera", cam.id, edge_id, source)
         await asyncio.sleep(0.05)  # 50ms pacing
 

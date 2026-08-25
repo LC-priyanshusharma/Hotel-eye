@@ -58,6 +58,9 @@ class AttendanceDetectionPlugin(BaseDetectionPlugin):
         timestamp = frame_data.timestamp
         frame = frame_data.frame
         
+        if frame is None or not frame_data.detections:
+            return events
+        
         auth_in_frame = []
         unauth_count = 0
         

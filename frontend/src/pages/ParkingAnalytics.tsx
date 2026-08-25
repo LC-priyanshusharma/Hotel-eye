@@ -2,22 +2,20 @@ import { useEffect, useState } from 'react'
 import { Car, Clock, ShieldCheck, AlertCircle } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { cn } from '@/utils/utils'
+import { api } from '@/api/api'
+import { useCameraStateStore } from '@/store/useCameraStateStore'
 
 export function ParkingAnalytics() {
   const [stats, setStats] = useState<any>({})
   const [loading, setLoading] = useState(true)
+  const states = useCameraStateStore(state => state.states)
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch('/api/parking/stats', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        })
-        if (res.ok) {
-          const data = await res.json()
-          setStats(data.current)
+        const res = await api.get('/api/parking/stats')
+        if (res.data?.current) {
+          setStats(res.data.current)
         }
       } catch (err) {
         console.error("Failed to fetch parking data", err)
@@ -27,9 +25,31 @@ export function ParkingAnalytics() {
     }
     
     fetchData()
-    const int = setInterval(fetchData, 3000)
-    return () => clearInterval(int)
   }, [])
+  
+  // Overlay live websocket data
+  useEffect(() => {
+    if (states) {
+      setStats((prevStats: any) => {
+         const newStats = { ...prevStats };
+         Object.values(states || {}).forEach((state: any) => {
+            const evts = state.events?.ParkingPlugin || [];
+            evts.forEach((e: any) => {
+               if (e.event_type === 'PARKING_STATS') {
+                  newStats[state.camera_id] = {
+                      ...newStats[state.camera_id],
+                      occupied_spots: e.metadata?.occupied_spots || 0,
+                      available_spots: e.metadata?.available_spots || 0,
+                      total_spots: e.metadata?.total_spots || 0,
+                      spot_status: e.metadata?.spot_status || []
+                  };
+               }
+            });
+         });
+         return newStats;
+      });
+    }
+  }, [states]);
 
   if (loading) {
     return <div className="p-8 flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>

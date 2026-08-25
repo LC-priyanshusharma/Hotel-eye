@@ -22,7 +22,7 @@ class PeopleCountingPlugin(BaseDetectionPlugin):
         camera_id = frame_data.camera_id
         timestamp = frame_data.timestamp
         events = []
-        
+        logger.debug(f"PeopleCountingPlugin running for {camera_id} with {len(frame_data.detections)} detections")
         state = tracker_context.get_state(self.plugin_name, camera_id)
         if "unique_ids" not in state:
             state["unique_ids"] = set()

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import axios from 'axios';
+import { useCameraStateStore } from '@/store/useCameraStateStore';
+import { api } from '@/api/api';
 import { Camera, Car, Search, Filter, AlertTriangle, ShieldCheck, Download } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -19,12 +20,13 @@ interface ANPREvent {
 export default function ANPRAnalytics() {
   const [liveEvents, setLiveEvents] = useState<ANPREvent[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const states = useCameraStateStore(state => state.states);
   
   // Fetch historical data
   const { data: history } = useQuery({
     queryKey: ['anpr-history', searchTerm],
     queryFn: async () => {
-      const res = await axios.get(`/api/plugins/anpr/search?limit=20${searchTerm ? `&plate=${searchTerm}` : ''}`);
+      const res = await api.get(`/api/plugins/anpr/search?limit=20${searchTerm ? `&plate=${searchTerm}` : ''}`);
       return res.data;
     }
   });
@@ -32,55 +34,46 @@ export default function ANPRAnalytics() {
   const { data: stats } = useQuery({
     queryKey: ['anpr-stats'],
     queryFn: async () => {
-      const res = await axios.get('/api/plugins/anpr/stats');
+      const res = await api.get('/api/plugins/anpr/stats');
       return res.data;
     },
     refetchInterval: 5000
   });
 
-  // WebSocket connection for live events from the unified stream
+  // Consume live events from centralized store
   useEffect(() => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const token = localStorage.getItem('access_token') || '';
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/events?token=${encodeURIComponent(token)}`);
-    ws.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data);
-        let newEvents: ANPREvent[] = [];
-        
-        if (payload.type === 'telemetry' && payload.states) {
-          Object.values(payload.states).forEach((camData: any) => {
-            if (camData.events && camData.events['ANPRPlugin']) {
-              camData.events['ANPRPlugin'].forEach((evt: any) => {
-                if (evt.event_type === 'LIVE_TRACKING') {
-                  newEvents.push({
-                    ...evt,
-                    plate_number: evt.metadata?.plate_number || 'UNKNOWN',
-                    vehicle_type: evt.metadata?.vehicle_type,
-                    vehicle_snapshot: evt.metadata?.vehicle_snapshot
-                  });
-                }
-              });
-            }
-          });
-        }
-        if (newEvents.length > 0) {
-          setLiveEvents(prev => {
-            const combined = [...newEvents, ...prev];
-            // Keep only the newest event for each unique plate
-            const seen = new Set();
-            const unique = combined.filter(item => {
-              if (seen.has(item.plate_number)) return false;
-              seen.add(item.plate_number);
-              return true;
+    if (!states) return;
+    let newEvents: ANPREvent[] = [];
+    
+    Object.values(states).forEach((camData: any) => {
+      if (camData.events && camData.events['ANPRPlugin']) {
+        camData.events['ANPRPlugin'].forEach((evt: any) => {
+          if (evt.event_type === 'LIVE_TRACKING' || evt.event_type === 'NEW_PLATE') {
+            newEvents.push({
+              ...evt,
+              id: evt.id || `${camData.camera_id}-${evt.metadata?.plate_number || 'UNK'}-${evt.timestamp || Date.now()}`,
+              plate_number: evt.metadata?.plate_number || 'UNKNOWN',
+              vehicle_type: evt.metadata?.vehicle_type,
+              vehicle_snapshot: evt.metadata?.vehicle_snapshot
             });
-            return unique.slice(0, 10);
-          });
-        }
-      } catch(e) {}
-    };
-    return () => ws.close();
-  }, []);
+          }
+        });
+      }
+    });
+
+    if (newEvents.length > 0) {
+      setLiveEvents(prev => {
+        const combined = [...newEvents, ...prev];
+        const seen = new Set();
+        const unique = combined.filter(item => {
+          if (seen.has(item.plate_number)) return false;
+          seen.add(item.plate_number);
+          return true;
+        });
+        return unique.slice(0, 10);
+      });
+    }
+  }, [states]);
 
   return (
     <div className="p-6 space-y-6 text-white bg-zinc-950 min-h-screen">
@@ -167,16 +160,8 @@ export default function ANPRAnalytics() {
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
             <h2 className="text-xl font-semibold mb-4">Traffic Overview</h2>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={[{time: '08:00', count: 12}, {time: '09:00', count: 45}, {time: '10:00', count: 32}]}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                  <XAxis dataKey="time" stroke="#888" />
-                  <YAxis stroke="#888" />
-                  <Tooltip contentStyle={{backgroundColor: '#18181b', borderColor: '#27272a'}} />
-                  <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={3} dot={{r: 4, fill: '#3b82f6'}} />
-                </LineChart>
-              </ResponsiveContainer>
+            <div className="h-64 flex items-center justify-center border border-dashed border-zinc-700 rounded-lg">
+              <span className="text-zinc-500">Historical traffic API not yet implemented</span>
             </div>
           </div>
 

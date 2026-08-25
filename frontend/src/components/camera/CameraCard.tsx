@@ -1,5 +1,5 @@
 import { Maximize, Camera as CameraIcon, Video, VideoOff, Crosshair, Mic, Volume2, Settings, PictureInPicture, Signal, Users, SlidersHorizontal, Check, Play, Square, Zap, Box, Trash2 } from 'lucide-react'
-import { memo, useEffect, useState } from 'react'
+import { memo, useEffect, useState, useRef } from 'react'
 import { cn } from '@/utils/utils'
 import { motion } from 'framer-motion'
 import { VideoPlayer } from './VideoPlaceholder'
@@ -7,6 +7,7 @@ import { useAppStore } from '@/store/useAppStore'
 import { useToastStore } from '@/store/useToastStore'
 import { useCameraStateStore } from '@/store/useCameraStateStore'
 import { api } from '@/api/api'
+import { webrtcStreamManager } from '@/services/webrtcStreamManager'
 
 import { PluginManagerModal } from './PluginManagerModal'
 
@@ -44,6 +45,22 @@ export const CameraCard = memo(({ id, name, location, pipelineStatus: parentPipe
   const fps = telemetry?.fps || 0
   const latency = telemetry?.latency_ms || 0
 
+  const [isVisible, setIsVisible] = useState(false)
+  const cardRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsVisible(entry.isIntersecting)
+      },
+      { threshold: 0.1 }
+    )
+    if (cardRef.current) {
+      observer.observe(cardRef.current)
+    }
+    return () => observer.disconnect()
+  }, [])
+
   useEffect(() => {
     // Sync from parent polling, but ignore it for 8 seconds after a toggle
     // to prevent reverting to a stale state before the next poll completes.
@@ -56,16 +73,21 @@ export const CameraCard = memo(({ id, name, location, pipelineStatus: parentPipe
     e.stopPropagation()
     if (isToggling) return // Prevent double-clicks
     setIsToggling(true)
-    const endpoint = pipelineStatus === "Stopped" ? "/api/cameras/start" : "/api/cameras/stop"
-    const newStatus = pipelineStatus === "Stopped" ? "Connecting/Offline" : "Stopped"
+    const isStopping = pipelineStatus !== "Stopped"
+    const endpoint = isStopping ? "/api/cameras/stop" : "/api/cameras/start"
+    const newStatus = isStopping ? "Stopped" : "Connected"
     
+    if (isStopping) {
+      webrtcStreamManager.closeStream(id)
+    }
+
     try {
       setPipelineStatus(newStatus)
       setLastToggleTime(Date.now())
       await api.post(endpoint, { camera_id: id })
       addToast({
         title: "Success",
-        message: `Camera ${pipelineStatus === "Stopped" ? 'start initiated' : 'stopped'}.`,
+        message: `Camera ${isStopping ? 'stopped' : 'started'}.`,
         type: "success"
       })
     } catch (err: any) {
@@ -77,12 +99,13 @@ export const CameraCard = memo(({ id, name, location, pipelineStatus: parentPipe
         type: "danger"
       })
     } finally {
-      setTimeout(() => setIsToggling(false), 2000)
+      setIsToggling(false)
     }
   }
 
   return (
     <div 
+      ref={cardRef}
       className={cn(
         "w-full h-full relative group overflow-hidden rounded-2xl transition-all duration-500",
         isActive ? "ring-2 ring-primary glow-primary border-transparent glass-pro shadow-[0_0_40px_rgba(0,112,243,0.3)]" : "glass hover-lift border border-foreground/5 hover:border-foreground/20"
@@ -216,18 +239,15 @@ export const CameraCard = memo(({ id, name, location, pipelineStatus: parentPipe
 
       {/* Video Content */}
       <div className="relative w-full h-full">
-        {pipelineStatus === 'Connected' ? (
-          <VideoPlayer cameraId={id} streamUrl="mock" poster="https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=800&q=80" />
-        ) : pipelineStatus === 'Connecting/Offline' ? (
-          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black animate-pulse text-foreground/50">
-            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mb-4" />
-            <span className="text-xs font-bold tracking-widest uppercase">Connecting...</span>
-          </div>
-        ) : pipelineStatus === 'Error' ? (
-          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-danger/5 text-danger border border-danger/10">
-            <Zap className="w-8 h-8 mb-2 opacity-50" />
-            <span className="text-sm font-bold tracking-widest uppercase">Stream Offline</span>
-          </div>
+        {pipelineStatus !== 'Stopped' ? (
+          isVisible ? (
+            <VideoPlayer cameraId={id} streamUrl="mock" poster="https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=800&q=80" />
+          ) : (
+            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black text-foreground/30">
+              <VideoOff className="w-8 h-8 mb-2 opacity-50" />
+              <span className="font-mono text-xs tracking-widest">STANDBY (OFF-SCREEN)</span>
+            </div>
+          )
         ) : (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-background/90 text-foreground/50">
             <VideoOff className="w-12 h-12 mb-4 opacity-50" />

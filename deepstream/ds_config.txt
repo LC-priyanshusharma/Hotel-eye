@@ -22,7 +22,7 @@ gpu-id=0
 enable=1
 type=6
 msg-conv-config=msgconv_config.txt
-msg-broker-proto-lib=/opt/nvidia/deepstream/deepstream-6.0/lib/libnvds_redis_proto.so
+msg-broker-proto-lib=/opt/nvidia/deepstream/deepstream/lib/libnvds_redis_proto.so
 msg-broker-conn-str=redis;6379;inference_result_ds
 topic=inference_result_ds
 

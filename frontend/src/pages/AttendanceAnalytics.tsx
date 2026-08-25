@@ -2,22 +2,20 @@ import { useEffect, useState } from 'react'
 import { BadgeCheck, Users, Clock, AlertTriangle, LogIn, LogOut } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { cn } from '@/utils/utils'
+import { api } from '@/api/api'
+import { useCameraStateStore } from '@/store/useCameraStateStore'
 
 export function AttendanceAnalytics() {
   const [stats, setStats] = useState<any>({})
   const [loading, setLoading] = useState(true)
+  const states = useCameraStateStore(state => state.states)
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch('/api/attendance/stats', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        })
-        if (res.ok) {
-          const data = await res.json()
-          setStats(data.current)
+        const res = await api.get('/api/attendance/stats')
+        if (res.data?.current) {
+          setStats(res.data.current)
         }
       } catch (err) {
         console.error("Failed to fetch attendance data", err)
@@ -27,9 +25,39 @@ export function AttendanceAnalytics() {
     }
     
     fetchData()
-    const int = setInterval(fetchData, 3000)
-    return () => clearInterval(int)
   }, [])
+  
+  // Overlay live websocket data on top of historical stats
+  useEffect(() => {
+    if (states) {
+      setStats((prevStats: any) => {
+         const newStats = { ...prevStats };
+         Object.values(states || {}).forEach((state: any) => {
+            const camId = state.camera_id;
+            if (!newStats[camId]) {
+               newStats[camId] = { attendance_logs: [] };
+            }
+            
+            // Extract live frame data
+            const evts = state.events?.AttendancePlugin || [];
+            let auth: any[] = [];
+            let unauthCount = 0;
+            
+            evts.forEach((e: any) => {
+               if (e.event_type === 'AUTHORIZED_VISIBLE') {
+                  auth.push(e.metadata);
+               } else if (e.event_type === 'UNAUTHORIZED_VISIBLE') {
+                  unauthCount++;
+               }
+            });
+            
+            newStats[camId].authorized_employees_in_frame = auth;
+            newStats[camId].unauthorized_count = unauthCount;
+         });
+         return newStats;
+      });
+    }
+  }, [states]);
 
   if (loading) {
     return <div className="p-8 flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>

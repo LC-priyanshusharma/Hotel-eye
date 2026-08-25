@@ -108,10 +108,10 @@ class CartonCountingPlugin(BaseDetectionPlugin):
         events = []
         
         if self.exit_line_x is None:
-            # Set the line in the middle of the frame, but only covering the bottom half (the typical exit belt)
-            self.exit_line_x = frame_data.frame.shape[1] // 2
-            self.exit_line_y_min = int(frame_data.frame.shape[0] * 0.5)
-            self.exit_line_y_max = frame_data.frame.shape[0]
+            w, h = (frame_data.frame.shape[1], frame_data.frame.shape[0]) if frame_data.frame is not None else (1280, 720)
+            self.exit_line_x = w // 2
+            self.exit_line_y_min = int(h * 0.5)
+            self.exit_line_y_max = h
             
         drawings = []
         

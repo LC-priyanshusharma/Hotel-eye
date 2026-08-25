@@ -5,11 +5,6 @@ import { cn } from '@/utils/utils';
 import { motion } from 'framer-motion';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
 
-const mockChartData = Array.from({ length: 24 }).map((_, i) => ({
-  time: `${i}:00`,
-  compliance: 80 + Math.random() * 20
-}));
-
 export default function PPEAnalytics() {
   const { states } = useCameraStateStore();
 
@@ -178,31 +173,8 @@ export default function PPEAnalytics() {
             <h3 className="text-lg font-bold text-white">Compliance Trend (24h)</h3>
             <button className="text-sm text-primary hover:text-primary-400 transition-colors">Export Report</button>
           </div>
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={mockChartData}>
-                <defs>
-                  <linearGradient id="colorCompliance" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="time" stroke="#4b5563" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis stroke="#4b5563" fontSize={12} tickLine={false} axisLine={false} domain={[0, 100]} />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
-                  itemStyle={{ color: '#fff' }}
-                />
-                <Area 
-                  type="monotone" 
-                  dataKey="compliance" 
-                  stroke="#10b981" 
-                  strokeWidth={3}
-                  fillOpacity={1} 
-                  fill="url(#colorCompliance)" 
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+          <div className="h-64 w-full flex items-center justify-center border border-dashed border-zinc-700 rounded-lg">
+            <span className="text-zinc-500">Historical compliance API unavailable</span>
           </div>
         </div>
 

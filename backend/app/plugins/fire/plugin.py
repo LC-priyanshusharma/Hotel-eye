@@ -29,8 +29,9 @@ class FireDetectionPlugin(BaseDetectionPlugin):
     def process_frame(self, frame_data: FrameData, tracker_context: TrackerContext) -> List[DetectionEvent]:
         events = []
         camera_id = frame_data.camera_id
-        timestamp = frame_data.timestamp
         frame = frame_data.frame
+        if frame is None:
+            return events
         
         # Fast HSV thresholding check
         blur = cv2.GaussianBlur(frame, (21, 21), 0)

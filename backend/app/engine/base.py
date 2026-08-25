@@ -15,14 +15,14 @@ class DetectionEvent(BaseModel):
 
 @dataclass
 class NormalizedDetection:
-    camera_id: str
-    edge_id: str
-    frame_id: int
-    timestamp: float
-    class_id: int
-    class_name: str
-    confidence: float
-    bbox: List[float]  # [x_min, y_min, x_max, y_max]
+    camera_id: str = ""
+    edge_id: str = "deepstream"
+    frame_id: int = 0
+    timestamp: float = 0.0
+    class_id: int = 0
+    class_name: str = ""
+    confidence: float = 1.0
+    bbox: List[float] = field(default_factory=list)  # [x_min, y_min, x_max, y_max]
     track_id: Optional[int] = None
 
 @dataclass

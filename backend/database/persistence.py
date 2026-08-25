@@ -97,17 +97,6 @@ class DatabaseWorker:
         return False
 
     def _run(self):
-        # Run Alembic migrations automatically in the worker thread to avoid asyncio.run() conflict
-        try:
-            from alembic.config import Config
-            from alembic import command
-            import os
-            alembic_cfg = Config(os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic.ini"))
-            command.upgrade(alembic_cfg, "head")
-            logger.info("Successfully ran Alembic migrations.")
-        except Exception as e:
-            logger.error(f"Failed to run Alembic migrations: {e}")
-
         logger.info("Database Worker active and listening for events...")
         
         batch = []
@@ -144,7 +133,6 @@ class DatabaseWorker:
                 
             except Exception as e:
                 logger.error(f"Error processing event from Redis for DB: {e}")
-                time.sleep(1.0)
                 
             # Flush conditions
             if len(batch) >= self.batch_size or (time.time() - last_flush) > self.flush_interval:

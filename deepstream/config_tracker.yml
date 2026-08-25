@@ -1,0 +1,12 @@
+%YAML:1.0
+
+NvTracker:
+  # Target compute mode (0: CPU, 1: GPU)
+  compute-hw: 1
+  tracker-width: 640
+  tracker-height: 384
+  gpu-id: 0
+  ll-config-file: /opt/nvidia/deepstream/deepstream/samples/configs/deepstream-app/config_tracker_NvSORT.yml
+  ll-lib-file: /opt/nvidia/deepstream/deepstream/lib/libnvds_nvmultiobjecttracker.so
+  enable-batch-process: 1
+  display-tracking-id: 1

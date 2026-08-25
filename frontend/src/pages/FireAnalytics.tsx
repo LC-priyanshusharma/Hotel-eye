@@ -2,22 +2,20 @@ import { useEffect, useState } from 'react'
 import { Flame, AlertTriangle, Clock, Camera } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { cn } from '@/utils/utils'
+import { api } from '@/api/api'
+import { useCameraStateStore } from '@/store/useCameraStateStore'
 
 export function FireAnalytics() {
   const [events, setEvents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const states = useCameraStateStore(state => state.states)
 
   useEffect(() => {
     const fetchEvents = async () => {
       try {
-        const res = await fetch('/api/fire/events', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        })
-        if (res.ok) {
-          const data = await res.json()
-          setEvents(data.events)
+        const res = await api.get('/api/fire/events')
+        if (res.data?.events) {
+          setEvents(res.data.events)
         }
       } catch (err) {
         console.error("Failed to fetch fire events", err)
@@ -27,9 +25,27 @@ export function FireAnalytics() {
     }
     
     fetchEvents()
-    const int = setInterval(fetchEvents, 3000)
-    return () => clearInterval(int)
   }, [])
+  
+  useEffect(() => {
+    if (states) {
+      let newFireEvents = false;
+      Object.values(states || {}).forEach((state: any) => {
+         const evts = state.events?.FireDetectionPlugin || [];
+         if (evts.some((e: any) => e.event_type === 'FIRE_DETECTED')) {
+            newFireEvents = true;
+         }
+      });
+      if (newFireEvents) {
+          // Re-fetch to get latest from DB with snapshots
+          api.get('/api/fire/events')
+            .then(res => {
+              if (res.data?.events) setEvents(res.data.events)
+            })
+            .catch(() => {})
+      }
+    }
+  }, [states]);
 
   if (loading) {
     return <div className="p-8 flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>

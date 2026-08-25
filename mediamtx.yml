@@ -18,9 +18,15 @@ authInternalUsers:
 
 webrtc: yes
 webrtcAddress: :8189
+webrtcAllowOrigins:
+  - '*'
 webrtcLocalUDPAddress: :8189
-webrtcAdditionalHosts: [127.0.0.1, 192.168.1.6, 106.201.231.217]
+webrtcLocalTCPAddress: :8189
+webrtcAdditionalHosts:
+  - 106.201.231.217
+  - 127.0.0.1
+  - localhost
 
 paths:
   all_others:
-    source: publisher
+

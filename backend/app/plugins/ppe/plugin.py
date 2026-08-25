@@ -46,14 +46,33 @@ class PPEDetectionPlugin(BaseDetectionPlugin):
         if not detections:
             return events
 
+        contractor_1_count = 0  # Blue
+        contractor_2_count = 0  # Yellow
+        missing_ppe_count = 0
+
+        if frame is None:
+            for det in detections:
+                if det.class_id == 0:
+                    contractor_1_count += 1
+            events.append(DetectionEvent(
+                plugin_name=self.plugin_name,
+                event_type="PPE_STATS",
+                camera_id=camera_id,
+                timestamp=timestamp,
+                confidence=1.0,
+                metadata={
+                    "contractor_1_count": contractor_1_count,
+                    "contractor_2_count": contractor_2_count,
+                    "missing_ppe_count": missing_ppe_count,
+                    "drawings": []
+                }
+            ))
+            return events
+
         hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         
         persons_without_ppe = []
         drawings = []
-        
-        contractor_1_count = 0  # Blue
-        contractor_2_count = 0  # Yellow
-        missing_ppe_count = 0
 
         for det in detections:
             cls_id = det.class_id

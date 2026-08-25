@@ -48,7 +48,7 @@ class ANPRPlugin(BaseDetectionPlugin):
         timestamp = frame_data.timestamp
         frame = frame_data.frame
         
-        h, w = frame.shape[:2]
+        h, w = frame.shape[:2] if frame is not None else (720, 1280)
         detection_line_y = int(h * 0.45) # detection boundary at 45% of screen height (higher up)
         
         # Always emit a drawing event for the ROI line
@@ -67,6 +67,9 @@ class ANPRPlugin(BaseDetectionPlugin):
                 }]
             }
         ))
+        
+        if frame is None:
+            return events
         
         # 1. Iterate over vehicle detections provided by the core pipeline
         if not frame_data.detections:
@@ -88,10 +91,6 @@ class ANPRPlugin(BaseDetectionPlugin):
             
             # Crop vehicle
             vx1, vy1, vx2, vy2 = map(int, vehicle_box)
-            
-            # ONLY PROCESS VEHICLES THAT HAVE CROSSED THE DETECTION LINE
-            if vy2 < detection_line_y:
-                continue
                 
             # Boundary checks
             vx1, vy1 = max(0, vx1), max(0, vy1)

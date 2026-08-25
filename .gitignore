@@ -25,6 +25,8 @@ backend_debug*.log
 
 # Machine Learning models
 *.onnx
+*.engine
+*.onnx.data
 *.mlpackage
 backend/detection/yolo11n.onnx
 backend/detection/yolo11n.mlpackage/
@@ -71,3 +73,5 @@ backend/get_config.py
 
 # Others
 backend/camera_plugins_state.json
+deepstream_pyds/models/awiros/model.safetensors
+models/awiros/model.safetensors

@@ -1,21 +1,16 @@
 import { useState, useEffect } from 'react'
-import { Responsive, WidthProvider } from 'react-grid-layout/legacy'
-import 'react-grid-layout/css/styles.css'
-import 'react-resizable/css/styles.css'
 import { CameraCard } from '@/components/camera/CameraCard'
 import { LayoutGrid, Grid3X3, Grid2X2, Grid, LayoutTemplate, Plus, X, Play, Square } from 'lucide-react'
 import { cn } from '@/utils/utils'
 import { api } from '@/api/api'
 import { LiveNotificationSidebar } from './LiveNotificationSidebar'
 
-const ResponsiveGridLayout = WidthProvider(Responsive)
-
 const PRESET_LAYOUTS = [
   { id: '1x1', icon: LayoutTemplate, label: '1 Cam', cols: 1, cameras: 1 },
   { id: '2x2', icon: Grid2X2, label: '4 Cams', cols: 2, cameras: 4 },
   { id: '3x3', icon: Grid3X3, label: '9 Cams', cols: 3, cameras: 9 },
   { id: '4x4', icon: Grid, label: '16 Cams', cols: 4, cameras: 16 },
-  { id: '8x8', icon: LayoutGrid, label: '64 Cams', cols: 8, cameras: 64 },
+  { id: '5x5', icon: LayoutGrid, label: '25 Cams', cols: 5, cameras: 25 },
 ]
 
 import { useAppStore } from '@/store/useAppStore'
@@ -30,6 +25,12 @@ export function LiveCameras() {
   const [isAddingCamera, setIsAddingCamera] = useState(false)
   const [cameraName, setCameraName] = useState('')
   const [rtspUrl, setRtspUrl] = useState('')
+  const [sourceType, setSourceType] = useState<'rtsp' | 'video_file'>('video_file')
+  const [selectedPlugins, setSelectedPlugins] = useState<string[]>([
+    "IntrusionDetectionPlugin",
+    "PPEDetectionPlugin",
+    "PeopleCountingPlugin"
+  ])
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const fetchCameras = () => {
@@ -68,13 +69,31 @@ export function LiveCameras() {
 
     setIsSubmitting(true)
     try {
-      const res = await api.post('/api/cameras', { name: cameraName, rtsp_url: rtspUrl })
+      const res = await api.post('/api/cameras', { 
+        name: cameraName, 
+        rtsp_url: rtspUrl,
+        source_type: sourceType,
+        source: rtspUrl
+      })
       if (res.status === 200) {
-        const newCameraId = res.data.camera.id;
-        try {
-          await api.post('/api/cameras/start', { camera_id: newCameraId });
-        } catch (e) {
-          console.error("Failed to auto-start camera", e);
+        const newCameraId = res.data.camera_id || res.data.camera?.id;
+        if (newCameraId) {
+          // Configure plugins if selected
+          if (selectedPlugins.length > 0) {
+            try {
+              await api.post('/api/config', {
+                updates: { CAMERA_PLUGINS: { [newCameraId]: selectedPlugins } }
+              })
+            } catch (e) {
+              console.warn("Could not set initial plugins", e)
+            }
+          }
+          // Immediately start pipeline on backend
+          try {
+            await api.post('/api/cameras/start', { camera_id: newCameraId });
+          } catch (e) {
+            console.error("Failed to auto-start camera", e);
+          }
         }
         fetchCameras()
         setCameraName('')
@@ -104,29 +123,8 @@ export function LiveCameras() {
     }
   })
 
-  // Generate react-grid-layout configuration
-  const generateLayout = (camList: any[], cols: number) => {
-    return camList.map((c, i) => ({
-      i: c.id,
-      x: i % cols,
-      y: Math.floor(i / cols),
-      w: 1,
-      h: 1,
-      minW: 1,
-      minH: 1
-    }))
-  }
-
-  const [layout, setLayout] = useState<any[]>([])
-  
-  useEffect(() => {
-    setLayout(generateLayout(cameras, activeLayout.cols))
-  }, [cameras.length, activeLayout.cols])
-
-  // When changing layouts, regenerate grid
   const handleLayoutChange = (preset: typeof PRESET_LAYOUTS[0]) => {
     setActiveLayout(preset)
-    setLayout(generateLayout(cameras, preset.cols))
   }
 
   return (
@@ -203,40 +201,37 @@ export function LiveCameras() {
         </div>
 
         {/* Grid Area */}
-        <div className="flex-1 overflow-y-auto p-2 flex flex-col">
-          {activeCameraId ? (
-            <div className="flex-1 w-full p-4 flex items-center justify-center">
+        <div className="flex-1 overflow-y-auto p-2 flex flex-col relative">
+          {activeCameraId && (
+            <div className="absolute inset-0 z-20 p-4 flex items-center justify-center bg-background/95 backdrop-blur-sm">
               <div className="w-full h-full max-w-7xl">
                 {cameras.filter(c => c.id === activeCameraId).map(cam => (
-                  <CameraCard key={cam.id} {...cam} pipelineStatus={pipelineStatuses[cam.id] || "Stopped"} />
+                  <CameraCard key={`active-${cam.id}`} {...cam} pipelineStatus={pipelineStatuses[cam.id] || "Stopped"} />
                 ))}
               </div>
             </div>
-          ) : (
-            <ResponsiveGridLayout
-            key={activeLayout.id}
-            className="layout"
-            layouts={{ lg: layout }}
-            breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
-            cols={{ lg: activeLayout.cols, md: activeLayout.cols, sm: 2, xs: 1, xxs: 1 }}
-            rowHeight={activeLayout.cols === 1 ? 600 : activeLayout.cols === 2 ? 400 : 250}
-            isDraggable={true}
-            isResizable={true}
-            margin={[16, 16]}
-            onLayoutChange={(newLayout: any) => {
-              // Only update if it actually changed to prevent infinite loops
-              const changed = JSON.stringify(newLayout) !== JSON.stringify(layout);
-              if (changed) setLayout(newLayout);
-            }}
-            useCSSTransforms={true}
-          >
-            {cameras.map((cam) => (
-              <div key={cam.id} className="cursor-move">
-                <CameraCard {...cam} pipelineStatus={pipelineStatuses[cam.id] || "Stopped"} />
-              </div>
-            ))}
-          </ResponsiveGridLayout>
           )}
+
+          <div className={cn("w-full h-full p-2 overflow-y-auto custom-scrollbar", activeCameraId ? "invisible pointer-events-none" : "visible")}>
+            <div 
+              className="grid gap-4 w-full transition-all duration-200"
+              style={{
+                gridTemplateColumns: `repeat(${activeLayout.cols}, minmax(0, 1fr))`
+              }}
+            >
+              {cameras.map((cam) => (
+                <div 
+                  key={cam.id} 
+                  className={cn(
+                    "w-full rounded-2xl overflow-hidden shadow-lg border border-border/40 transition-transform duration-150",
+                    activeLayout.cols === 1 ? "h-[75vh]" : activeLayout.cols === 2 ? "h-[380px]" : activeLayout.cols === 3 ? "h-[290px]" : "h-[220px]"
+                  )}
+                >
+                  <CameraCard {...cam} pipelineStatus={pipelineStatuses[cam.id] || "Stopped"} />
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
         
         {/* Add Camera Modal Overlay */}
@@ -253,30 +248,114 @@ export function LiveCameras() {
               <h3 className="font-extrabold text-xl text-white mb-2 tracking-tight">Add Video Stream</h3>
               <p className="text-sm text-muted-foreground mb-8">Connect a new RTSP stream or upload a test video source.</p>
               
-              <form onSubmit={handleAddCamera} className="space-y-6">
+              <form onSubmit={handleAddCamera} className="space-y-4 max-h-[80vh] overflow-y-auto pr-1 custom-scrollbar">
                 <div className="flex flex-col gap-2">
-                  <label className="text-sm font-medium text-foreground">Camera Name</label>
+                  <label className="text-sm font-medium text-foreground">Camera / Stream Name</label>
                   <input 
                     type="text" 
                     value={cameraName}
                     onChange={(e) => setCameraName(e.target.value)}
-                    placeholder="e.g. Front Gate" 
+                    placeholder="e.g. Front Gate or Video 1" 
                     className="bg-muted/30 border border-border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 w-full" 
                     required
                   />
                 </div>
 
+                {/* Source Type Selector */}
                 <div className="flex flex-col gap-2">
-                  <label className="text-sm font-medium text-foreground">RTSP URL</label>
+                  <label className="text-sm font-medium text-foreground">Source Type</label>
+                  <div className="grid grid-cols-2 gap-2 bg-muted/20 p-1 rounded-xl border border-border/50">
+                    <button
+                      type="button"
+                      onClick={() => setSourceType('video_file')}
+                      className={cn(
+                        "py-2 text-xs font-semibold rounded-lg transition-all text-center",
+                        sourceType === 'video_file' 
+                          ? "bg-primary text-primary-foreground shadow-md shadow-primary/20" 
+                          : "text-muted-foreground hover:text-foreground hover:bg-background/40"
+                      )}
+                    >
+                      📁 Local Video (MP4)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSourceType('rtsp')}
+                      className={cn(
+                        "py-2 text-xs font-semibold rounded-lg transition-all text-center",
+                        sourceType === 'rtsp' 
+                          ? "bg-primary text-primary-foreground shadow-md shadow-primary/20" 
+                          : "text-muted-foreground hover:text-foreground hover:bg-background/40"
+                      )}
+                    >
+                      📹 RTSP Stream
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-medium text-foreground">
+                    {sourceType === 'video_file' ? 'Local Video File Path' : 'RTSP Stream URL'}
+                  </label>
                   <input 
                     type="text" 
                     value={rtspUrl}
                     onChange={(e) => setRtspUrl(e.target.value)}
-                    placeholder="rtsp://admin:pass@192.168.1.100/stream" 
+                    placeholder={sourceType === 'video_file' ? "/home/user/Videos/1.mp4" : "rtsp://admin:pass@192.168.1.100/stream"} 
                     className="bg-muted/30 border border-border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 w-full font-mono text-sm" 
                     required
                   />
-                  <p className="text-xs text-muted-foreground">Credentials containing special characters will be automatically encoded.</p>
+                  <p className="text-xs text-muted-foreground">
+                    {sourceType === 'video_file' 
+                      ? "Path to any local .mp4 file on the Jetson machine."
+                      : "Credentials containing special characters will be automatically encoded."}
+                  </p>
+                </div>
+
+                {/* Analytics Selection */}
+                <div className="flex flex-col gap-2 pt-2 border-t border-border/50">
+                  <div className="flex justify-between items-center">
+                    <label className="text-sm font-medium text-foreground">Select Analytics (Optional)</label>
+                    <span className="text-xs text-muted-foreground">{selectedPlugins.length} selected</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5 max-h-36 overflow-y-auto pr-1 custom-scrollbar">
+                    {[
+                      { id: "IntrusionDetectionPlugin", label: "Intrusion" },
+                      { id: "PPEDetectionPlugin", label: "PPE Safety" },
+                      { id: "FireDetectionPlugin", label: "Fire & Smoke" },
+                      { id: "ANPRPlugin", label: "ANPR Plate" },
+                      { id: "PeopleCountingPlugin", label: "People Counting" },
+                      { id: "ParkingAnalyticsPlugin", label: "Parking" },
+                      { id: "AttendanceDetectionPlugin", label: "Attendance" },
+                      { id: "VisitorPlugin", label: "Visitor" },
+                      { id: "CartonCountingPlugin", label: "Carton Counting" },
+                      { id: "RestrictionZonePlugin", label: "Restriction Zone" },
+                    ].map(plugin => {
+                      const isSelected = selectedPlugins.includes(plugin.id);
+                      return (
+                        <button
+                          key={plugin.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedPlugins(prev => 
+                              isSelected ? prev.filter(p => p !== plugin.id) : [...prev, plugin.id]
+                            );
+                          }}
+                          className={cn(
+                            "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium text-left transition-all",
+                            isSelected 
+                              ? "border-primary/50 bg-primary/10 text-primary" 
+                              : "border-border/60 bg-muted/20 text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                          )}
+                        >
+                          <div className={cn(
+                            "w-2 h-2 rounded-full",
+                            isSelected ? "bg-primary" : "bg-muted-foreground/30"
+                          )} />
+                          <span className="truncate">{plugin.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <button 
@@ -284,7 +363,7 @@ export function LiveCameras() {
                   disabled={isSubmitting}
                   className="w-full flex justify-center items-center gap-2 px-6 py-2.5 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20 disabled:opacity-50 mt-2"
                 >
-                  <Plus className="w-4 h-4" /> {isSubmitting ? 'Connecting...' : 'Add Camera'}
+                  <Plus className="w-4 h-4" /> {isSubmitting ? 'Connecting...' : 'Add & Start Stream'}
                 </button>
               </form>
             </div>

@@ -1,28 +1,46 @@
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { Box, TrendingUp, AlertCircle, ArrowUpRight, ArrowDownRight, PackageCheck, PackageX, Activity } from 'lucide-react'
-import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis, PieChart, Pie, Cell, CartesianGrid } from 'recharts'
+import { Box, TrendingUp, ArrowUpRight, ArrowDownRight, PackageCheck, Activity, Camera } from 'lucide-react'
+import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts'
+import { useCameraStateStore } from '@/store/useCameraStateStore'
 import { cn } from '@/utils/utils'
 
-const hourlyData = [
-  { time: '08:00', loaded: 145, unloaded: 120 },
-  { time: '09:00', loaded: 165, unloaded: 135 },
-  { time: '10:00', loaded: 180, unloaded: 150 },
-  { time: '11:00', loaded: 170, unloaded: 165 },
-  { time: '12:00', loaded: 140, unloaded: 190 },
-  { time: '13:00', loaded: 210, unloaded: 230 },
-  { time: '14:00', loaded: 245, unloaded: 215 },
-  { time: '15:00', loaded: 190, unloaded: 180 },
-]
-
-const pieData = [
-  { name: 'Standard Size', value: 400 },
-  { name: 'Oversized', value: 150 },
-  { name: 'Fragile', value: 85 },
-  { name: 'Damaged', value: 12 },
-]
-const COLORS = ['#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444']
-
 export function CartonAnalytics() {
+  const states = useCameraStateStore(state => state.states)
+  const [history, setHistory] = useState<{ time: string; count: number }[]>([])
+  const lastTotalRef = useRef<number>(0)
+
+  // Aggregate real-time carton metrics from all active camera streams
+  const { totalCartons, activeConveyors, liveRate } = useMemo(() => {
+    let total = 0
+    let conveyors = 0
+
+    Object.values(states || {}).forEach((camState: any) => {
+      const pluginEvents = camState.events?.CartonCountingPlugin || []
+      const statsEvent = pluginEvents.find((e: any) => e.event_type === 'CARTON_STATS')
+      if (statsEvent?.metadata) {
+        total += statsEvent.metadata.total_cartons_counted || 0
+        conveyors += 1
+      }
+    })
+
+    const rate = Math.max(0, total - lastTotalRef.current)
+    lastTotalRef.current = total
+
+    return { totalCartons: total, activeConveyors: conveyors, liveRate: rate }
+  }, [states])
+
+  // Rolling time-series for conveyor throughput
+  useEffect(() => {
+    const now = new Date()
+    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`
+
+    setHistory(prev => {
+      const updated = [...prev, { time: timeStr, count: totalCartons }]
+      return updated.slice(-15) // Keep last 15 ticks
+    })
+  }, [totalCartons])
+
   return (
     <div className="flex-1 p-8 overflow-y-auto custom-scrollbar h-full relative">
       {/* Background ambient effects */}
@@ -36,23 +54,23 @@ export function CartonAnalytics() {
               <Box className="w-10 h-10 text-primary drop-shadow-[0_0_15px_rgba(59,130,246,0.6)]" />
               Carton Analytics
             </h1>
-            <p className="text-foreground/60 mt-2 font-medium">Real-time box tracking, loading rates, and supply chain insights.</p>
+            <p className="text-foreground/60 mt-2 font-medium">Real-time conveyor tracking, package counting, and supply chain telemetry.</p>
           </div>
           
           <div className="flex gap-4">
             <span className="glass-panel px-4 py-2 rounded-xl text-sm font-medium text-foreground/80 border border-foreground/10 flex items-center gap-2 shadow-lg">
-              <span className="w-2 h-2 rounded-full bg-success animate-pulse glow-success" />
-              System Active
+              <span className={`w-2 h-2 rounded-full ${activeConveyors > 0 ? 'bg-success animate-pulse glow-success' : 'bg-warning'}`} />
+              {activeConveyors > 0 ? `${activeConveyors} Active Stream${activeConveyors > 1 ? 's' : ''}` : 'Awaiting Streams'}
             </span>
           </div>
         </div>
 
-        {/* KPI Grid */}
+        {/* Real-time KPI Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <KPICard 
-            title="Total Cartons Today" 
-            value="4,285" 
-            trend="+12.5%" 
+            title="Total Cartons Counted" 
+            value={totalCartons.toLocaleString()} 
+            trend="+100%" 
             trendUp={true} 
             icon={Box} 
             color="text-primary" 
@@ -60,58 +78,60 @@ export function CartonAnalytics() {
             borderColor="border-primary/20"
           />
           <KPICard 
-            title="Loading Rate / hr" 
-            value="342" 
-            trend="+5.2%" 
-            trendUp={true} 
-            icon={TrendingUp} 
+            title="Conveyor Lines Active" 
+            value={activeConveyors.toString()} 
+            trend={activeConveyors > 0 ? "Online" : "Idle"} 
+            trendUp={activeConveyors > 0} 
+            icon={Camera} 
             color="text-success" 
             bg="bg-success/10" 
             borderColor="border-success/20"
           />
           <KPICard 
-            title="Safe Deliveries" 
-            value="98.5%" 
-            trend="-0.5%" 
-            trendUp={false} 
-            icon={PackageCheck} 
+            title="Live Flow Rate" 
+            value={`${liveRate} / sec`} 
+            trend="Real-Time" 
+            trendUp={liveRate > 0} 
+            icon={TrendingUp} 
             color="text-warning" 
             bg="bg-warning/10" 
             borderColor="border-warning/20"
           />
           <KPICard 
-            title="Exceptions (Damaged)" 
-            value="12" 
-            trend="-2" 
-            trendUp={true} 
-            icon={PackageX} 
-            color="text-danger" 
-            bg="bg-danger/10" 
-            borderColor="border-danger/20"
+            title="Line Status" 
+            value={activeConveyors > 0 ? "Tracking" : "Standby"} 
+            trend="AI Vision" 
+            trendUp={activeConveyors > 0} 
+            icon={PackageCheck} 
+            color="text-accent" 
+            bg="bg-accent/10" 
+            borderColor="border-accent/20"
           />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Chart */}
-          <div className="lg:col-span-2 glass-panel p-6 rounded-2xl border border-foreground/10 shadow-2xl relative overflow-hidden group">
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-            <div className="flex justify-between items-center mb-6 relative z-10">
-              <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                <Activity className="w-5 h-5 text-primary" />
-                Hourly Loading vs Unloading
-              </h3>
-            </div>
-            <div className="h-[350px] w-full relative z-10">
+        {/* Main Chart */}
+        <div className="glass-panel p-6 rounded-2xl border border-foreground/10 shadow-2xl relative overflow-hidden group">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+          <div className="flex justify-between items-center mb-6 relative z-10">
+            <h3 className="text-xl font-bold text-white flex items-center gap-2">
+              <Activity className="w-5 h-5 text-primary" />
+              Real-Time Conveyor Count History
+            </h3>
+            <span className="text-xs text-muted-foreground uppercase font-mono tracking-wider">Live WebSocket Feed</span>
+          </div>
+          <div className="h-[350px] w-full relative z-10">
+            {history.length === 0 || totalCartons === 0 && activeConveyors === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-muted-foreground gap-3">
+                <Box className="w-12 h-12 opacity-20" />
+                <p className="text-sm font-medium">No carton tracking activity detected. Start a camera with CartonCountingPlugin enabled.</p>
+              </div>
+            ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={hourlyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <AreaChart data={history.map(item => ({ ...item }))} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
-                    <linearGradient id="colorLoaded" x1="0" y1="0" x2="0" y2="1">
+                    <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4}/>
                       <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                    </linearGradient>
-                    <linearGradient id="colorUnloaded" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.4}/>
-                      <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
@@ -121,56 +141,10 @@ export function CartonAnalytics() {
                     contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '12px', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.5)' }}
                     itemStyle={{ color: '#fff' }}
                   />
-                  <Area type="monotone" dataKey="loaded" name="Loaded Cartons" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorLoaded)" />
-                  <Area type="monotone" dataKey="unloaded" name="Unloaded Cartons" stroke="#8b5cf6" strokeWidth={3} fillOpacity={1} fill="url(#colorUnloaded)" />
+                  <Area type="monotone" dataKey="count" name="Cumulative Cartons" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorCount)" />
                 </AreaChart>
               </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* Pie Chart */}
-          <div className="glass-panel p-6 rounded-2xl border border-foreground/10 shadow-2xl relative overflow-hidden group">
-             <div className="absolute inset-0 bg-gradient-to-bl from-accent/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-            <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2 relative z-10">
-              <Box className="w-5 h-5 text-accent" />
-              Carton Types
-            </h3>
-            <div className="h-[250px] relative z-10 flex items-center justify-center">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={90}
-                    paddingAngle={5}
-                    dataKey="value"
-                    stroke="none"
-                  >
-                    {pieData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '8px' }}
-                    itemStyle={{ color: '#fff' }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4 mt-2 relative z-10">
-              {pieData.map((item, index) => (
-                <div key={item.name} className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full shadow-sm" style={{ backgroundColor: COLORS[index] }} />
-                  <div className="flex flex-col">
-                    <span className="text-xs text-foreground/50">{item.name}</span>
-                    <span className="text-sm font-bold text-white">{item.value}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
+            )}
           </div>
         </div>
 
