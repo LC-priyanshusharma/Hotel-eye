@@ -230,11 +230,11 @@ class DeepStreamPipeline:
             if pad:
                 self.demux_pads[i] = pad
 
-        sgie_src_pad = sgie.get_static_pad("src")
-        if not sgie_src_pad:
-            raise RuntimeError("Failed to get SGIE src pad")
+        tracker_src_pad = tracker.get_static_pad("src")
+        if not tracker_src_pad:
+            raise RuntimeError("Failed to get Tracker src pad")
 
-        sgie_src_pad.add_probe(
+        tracker_src_pad.add_probe(
             Gst.PadProbeType.BUFFER,
             self._osd_sink_pad_buffer_probe,
             0
@@ -260,14 +260,25 @@ class DeepStreamPipeline:
 
         elif message_type == Gst.MessageType.ERROR:
             err, debug = message.parse_error()
+            src_name = message.src.get_name()
 
             logger.error(
-                f"Error from {message.src.get_name()}: "
+                f"Error from {src_name}: "
                 f"{err.message}"
             )
 
             if debug:
                 logger.error(f"GStreamer debug: {debug}")
+
+            # Isolate failed camera source bin so other cameras continue running uninterrupted
+            for sid, (cam_id, s_uri) in list(self.sources.items()):
+                if f"source-bin-{sid}" in src_name or f"uri-decode-bin-{sid}" in src_name or f"source_{sid}" in src_name:
+                    logger.warning(f"Isolating disconnected camera source {cam_id} (source {sid})")
+                    try:
+                        GLib.idle_add(self.remove_camera, cam_id)
+                    except Exception as e:
+                        logger.error(f"Failed to remove disconnected camera {sid}: {e}")
+                    break
 
         elif message_type == Gst.MessageType.WARNING:
             err, debug = message.parse_warning()
