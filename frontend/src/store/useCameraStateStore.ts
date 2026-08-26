@@ -13,6 +13,7 @@ interface CameraStateStore {
   isConnected: boolean
   connect: () => void
   disconnect: () => void
+  setCameraPlugins: (cameraId: string, allowedPlugins: string[]) => void
 }
 
 let ws: WebSocket | null = null;
@@ -20,6 +21,29 @@ let ws: WebSocket | null = null;
 export const useCameraStateStore = create<CameraStateStore>((set, get) => ({
   states: {},
   isConnected: false,
+  setCameraPlugins: (cameraId: string, allowedPlugins: string[]) => {
+    set((state) => {
+      const camState = state.states[cameraId];
+      if (!camState || !camState.events) return state;
+
+      const filteredEvents: Record<string, any> = {};
+      for (const [pName, pData] of Object.entries(camState.events)) {
+        if (allowedPlugins.includes(pName)) {
+          filteredEvents[pName] = pData;
+        }
+      }
+
+      return {
+        states: {
+          ...state.states,
+          [cameraId]: {
+            ...camState,
+            events: filteredEvents
+          }
+        }
+      };
+    });
+  },
   connect: () => {
     if (ws) return;
     

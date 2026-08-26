@@ -45,7 +45,17 @@ async def update_config(
                     if key == "CAMERA_PLUGINS":
                         config.save_plugins_state()
                         
-                        pass
+                        from core.state import sync_camera_plugins
+                        import redis, json
+                        
+                        for cam_id, p_list in value.items():
+                            sync_camera_plugins(cam_id, p_list)
+                            
+                        try:
+                            r = redis.Redis.from_url(config.REDIS_URL)
+                            r.publish("config:plugins_updated", json.dumps(value))
+                        except Exception:
+                            pass
                 else:
                     setattr(config, key, value)
         return {"status": "success", "message": "Configuration updated in memory"}

@@ -3,6 +3,7 @@ import { X, Activity, Cpu, Zap, Box, Hash } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { api } from '@/api/api'
 import { cn } from '@/utils/utils'
+import { useCameraStateStore } from '@/store/useCameraStateStore'
 
 const PLUGIN_METRICS: Record<string, any> = {
   "VisitorPlugin": { cost: "Medium", cpu: "8%", gpu: "15%", latency: "+20ms", mem: "100MB", version: "v2.0" },
@@ -51,6 +52,10 @@ export const PluginManagerModal = memo(({ cameraId, isOpen, onClose }: { cameraI
     }
     
     setAllowedPlugins(newPlugins);
+    
+    // Instant 0ms visual update in local Zustand store
+    useCameraStateStore.getState().setCameraPlugins(cameraId, newPlugins);
+
     api.post('/api/config', {
       updates: { CAMERA_PLUGINS: { [cameraId]: newPlugins } }
     }).catch(err => {

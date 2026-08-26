@@ -49,3 +49,17 @@ def update_global_state(packet: dict):
         packet["events"] = pruned_events
         packet["_cached_events"] = cached_events
         LATEST_DATA[cam_id] = packet
+
+def sync_camera_plugins(cam_id: str, allowed: list):
+    """Immediately synchronizes global state when plugins are toggled in dynamic plugin manager."""
+    with DATA_LOCK:
+        if cam_id in LATEST_DATA:
+            old_events = LATEST_DATA[cam_id].get("events", {})
+            cached_events = LATEST_DATA[cam_id].get("_cached_events", {})
+            if allowed is not None:
+                for p in list(old_events.keys()):
+                    if p not in allowed:
+                        del old_events[p]
+                for p in list(cached_events.keys()):
+                    if p not in allowed:
+                        del cached_events[p]
