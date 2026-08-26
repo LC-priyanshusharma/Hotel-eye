@@ -102,10 +102,10 @@ class WebRTCStreamManager {
 
       const host = window.location.hostname;
       const paths = [
-        `raw_${entry.cameraId}`,
         entry.cameraId,
-        `raw_${entry.cameraId.toLowerCase()}`,
-        entry.cameraId.toLowerCase()
+        `raw_${entry.cameraId}`,
+        entry.cameraId.toLowerCase(),
+        `raw_${entry.cameraId.toLowerCase()}`
       ];
 
       const whepUrls: string[] = [];
