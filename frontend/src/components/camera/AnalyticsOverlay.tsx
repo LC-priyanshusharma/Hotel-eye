@@ -52,24 +52,16 @@ export const AnalyticsOverlay: React.FC<AnalyticsOverlayProps> = ({ cameraId }) 
     const detections = telemetry.detections || [];
     const events = telemetry.events || {};
 
-    // 1. Get exact video intrinsic dimensions from parent <video> element (No dynamic guessing/jitter)
-    const videoEl = parent.querySelector('video') as HTMLVideoElement | null;
-    let vidW = videoEl?.videoWidth || 0;
-    let vidH = videoEl?.videoHeight || 0;
-
-    // Fallback if video metadata has not yet loaded
-    if (vidW === 0 || vidH === 0) {
-      if (cameraId.includes('77389945') || cameraId.includes('f687142d')) {
-        vidW = 576;
-        vidH = 1024;
-      } else {
-        vidW = 1280;
-        vidH = 720;
-      }
-    }
+    // 1. DeepStream stream coordinate space is normalized to 1280x720
+    const vidW = 1280;
+    const vidH = 720;
 
     // 2. Exact aspect-ratio viewport computation (Matches object-contain perfectly)
-    const videoAspect = vidW / vidH;
+    const videoEl = parent.querySelector('video') as HTMLVideoElement | null;
+    const rawAspect = (videoEl?.videoWidth && videoEl?.videoHeight)
+      ? (videoEl.videoWidth / videoEl.videoHeight)
+      : (vidW / vidH);
+
     const containerAspect = width / (height || 1);
 
     let renderW = width;
@@ -77,16 +69,16 @@ export const AnalyticsOverlay: React.FC<AnalyticsOverlayProps> = ({ cameraId }) 
     let offsetX = 0;
     let offsetY = 0;
 
-    if (containerAspect > videoAspect) {
+    if (containerAspect > rawAspect) {
       // Container is wider -> Pillarbox (bars on left and right)
-      renderW = height * videoAspect;
+      renderW = height * rawAspect;
       renderH = height;
       offsetX = (width - renderW) / 2;
       offsetY = 0;
     } else {
       // Container is taller -> Letterbox (bars on top and bottom)
       renderW = width;
-      renderH = width / videoAspect;
+      renderH = width / rawAspect;
       offsetX = 0;
       offsetY = (height - renderH) / 2;
     }

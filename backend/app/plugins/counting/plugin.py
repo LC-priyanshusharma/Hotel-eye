@@ -37,13 +37,8 @@ class PeopleCountingPlugin(BaseDetectionPlugin):
         
         current_count = 0
         
-        # Fixed reference dimensions per camera source to prevent any line jittering
-        if "77389945" in camera_id or "f687142d" in camera_id:
-            fw, fh = 576, 1024
-        elif frame_data.frame is not None:
-            fh, fw = frame_data.frame.shape[:2]
-        else:
-            fw, fh = 1280, 720
+        # Standard 1280x720 stream coordinate space matching DeepStream streammux
+        fw, fh = 1280, 720
 
         # Fixed dual parallel lines inside the camera view
         line1_y = int(fh * 0.45) # Upper line (Entry / IN line)

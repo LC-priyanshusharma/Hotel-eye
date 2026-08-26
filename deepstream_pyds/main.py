@@ -178,7 +178,6 @@ class DeepStreamPipeline:
         for element in [
             pgie,
             tracker,
-            sgie,
             nvvidconv1,
             nvosd,
             tee,
@@ -195,11 +194,8 @@ class DeepStreamPipeline:
         if not pgie.link(tracker):
             raise RuntimeError("Failed to link pgie -> tracker")
 
-        if not tracker.link(sgie):
-            raise RuntimeError("Failed to link tracker -> sgie")
-
-        if not sgie.link(nvvidconv1):
-            raise RuntimeError("Failed to link sgie -> nvvideoconvert")
+        if not tracker.link(nvvidconv1):
+            raise RuntimeError("Failed to link tracker -> nvvideoconvert")
 
         if not nvvidconv1.link(nvosd):
             raise RuntimeError("Failed to link nvvideoconvert -> nvdsosd")
