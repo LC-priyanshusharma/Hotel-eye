@@ -52,6 +52,14 @@ export const AnalyticsOverlay: React.FC<AnalyticsOverlayProps> = ({ cameraId }) 
     const detections = telemetry.detections || [];
     const events = telemetry.events || {};
 
+    // If all plugins are turned off, keep video completely clean with no boxes or lines
+    const hasActivePlugins = Object.entries(events).some(([_, evts]) => 
+      Array.isArray(evts) ? evts.length > 0 : !!evts
+    );
+    if (!hasActivePlugins) {
+      return;
+    }
+
     // 1. DeepStream stream coordinate space is normalized to 1280x720
     const vidW = 1280;
     const vidH = 720;
