@@ -21,6 +21,7 @@ export const CameraCard = memo(({ id, name, location, pipelineStatus: parentPipe
   let personCount = 0
   let inCount = 0
   let outCount = 0
+  let totalPeopleCount = 0
   let isCountingEnabled = false
 
   if (Array.isArray(countingEvents)) {
@@ -29,6 +30,7 @@ export const CameraCard = memo(({ id, name, location, pipelineStatus: parentPipe
         personCount = event.metadata?.current_people_in_frame || 0
         inCount = event.metadata?.in_count || 0
         outCount = event.metadata?.out_count || 0
+        totalPeopleCount = event.metadata?.total_unique_people_seen || 0
         isCountingEnabled = true
         break
       }
@@ -246,6 +248,14 @@ export const CameraCard = memo(({ id, name, location, pipelineStatus: parentPipe
                   <span className="font-semibold text-gray-300">OUT:</span>
                   <span className="font-bold text-pink-400">
                     {outCount}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1.5 text-[10px] bg-background/60 border border-emerald-500/30 px-2 py-1 rounded backdrop-blur-sm text-white font-mono shadow-md pointer-events-auto" title="Total Unique People Counted">
+                  <UserCheck className="w-3 h-3 text-emerald-400" />
+                  <span className="font-semibold text-gray-300">TOT:</span>
+                  <span className="font-bold text-emerald-400">
+                    {totalPeopleCount}
                   </span>
                 </div>
               </>
