@@ -48,7 +48,16 @@ class RedisEventBus(IEventBus):
 
     def subscribe_group(self, group_name: str, consumer_name: str, channel: str, count: int = 10, block: int = 100) -> List[Any]:
         streams = {channel: ">"}
-        messages = self.client.xreadgroup(group_name, consumer_name, streams, count=count, block=block)
+        try:
+            messages = self.client.xreadgroup(group_name, consumer_name, streams, count=count, block=block)
+        except redis.exceptions.ResponseError as e:
+            if "NOGROUP" in str(e) or "no such key" in str(e).lower():
+                try:
+                    self.client.xgroup_create(channel, group_name, id="0", mkstream=True)
+                except Exception:
+                    pass
+                return []
+            raise
         
         results = []
         if messages:
@@ -59,7 +68,7 @@ class RedisEventBus(IEventBus):
                             parsed_data = json.loads(payload['data'])
                             results.append({"id": msg_id, "data": parsed_data})
                         except Exception as e:
-                            logger.error(f"Failed to decode Redis message: {e}")
+                            pass
         return results
         
     def ack(self, channel: str, group_name: str, msg_id: str) -> None:

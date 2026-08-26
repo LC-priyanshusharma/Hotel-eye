@@ -133,6 +133,7 @@ class DatabaseWorker:
                 
             except Exception as e:
                 logger.error(f"Error processing event from Redis for DB: {e}")
+                time.sleep(0.5)
                 
             # Flush conditions
             if len(batch) >= self.batch_size or (time.time() - last_flush) > self.flush_interval:
