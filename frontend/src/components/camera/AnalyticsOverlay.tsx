@@ -52,51 +52,24 @@ export const AnalyticsOverlay: React.FC<AnalyticsOverlayProps> = ({ cameraId }) 
     const detections = telemetry.detections || [];
     const events = telemetry.events || {};
 
-    // 1. Determine reference stream coordinate system (Detect 9:16 portrait vs 16:9 landscape)
-    let refW = 1280;
-    let refH = 720;
+    // 1. Get exact video intrinsic dimensions from parent <video> element (No dynamic guessing/jitter)
+    const videoEl = parent.querySelector('video') as HTMLVideoElement | null;
+    let vidW = videoEl?.videoWidth || 0;
+    let vidH = videoEl?.videoHeight || 0;
 
-    let maxX = 0;
-    let maxY = 0;
-    for (const d of detections) {
-      if (d.bbox && d.bbox.length >= 4) {
-        maxX = Math.max(maxX, d.bbox[0], d.bbox[2]);
-        maxY = Math.max(maxY, d.bbox[1], d.bbox[3]);
+    // Fallback if video metadata has not yet loaded
+    if (vidW === 0 || vidH === 0) {
+      if (cameraId.includes('77389945') || cameraId.includes('f687142d')) {
+        vidW = 576;
+        vidH = 1024;
+      } else {
+        vidW = 1280;
+        vidH = 720;
       }
     }
 
-    // Inspect plugin drawings coordinates as well
-    for (const [_, pluginEvents] of Object.entries(events)) {
-      if (Array.isArray(pluginEvents)) {
-        for (const evt of pluginEvents) {
-          for (const d of evt?.metadata?.drawings || []) {
-            if (d.coords) {
-              for (const pt of d.coords) {
-                if (Array.isArray(pt) && pt.length >= 2) {
-                  maxX = Math.max(maxX, pt[0]);
-                  maxY = Math.max(maxY, pt[1]);
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-
-    if (maxY > maxX && maxY > 800) {
-      // Portrait 9:16 vertical video (e.g. 464x832, 1080x1920, 720x1280)
-      refW = maxX > 700 ? 1080 : 464;
-      refH = maxY > 1200 ? 1920 : 832;
-    } else if (maxX > 1300 || maxY > 750) {
-      refW = 1920;
-      refH = 1080;
-    } else {
-      refW = 1280;
-      refH = 720;
-    }
-
-    // 2. Exact aspect-ratio viewport computation (Accounts for video object-contain pillarbox/letterbox)
-    const videoAspect = refW / refH;
+    // 2. Exact aspect-ratio viewport computation (Matches object-contain perfectly)
+    const videoAspect = vidW / vidH;
     const containerAspect = width / (height || 1);
 
     let renderW = width;
@@ -118,13 +91,13 @@ export const AnalyticsOverlay: React.FC<AnalyticsOverlayProps> = ({ cameraId }) 
       offsetY = (height - renderH) / 2;
     }
 
-    const scaleX = renderW / refW;
-    const scaleY = renderH / refH;
+    const scaleX = renderW / vidW;
+    const scaleY = renderH / vidH;
 
     const mapX = (x: number) => offsetX + x * scaleX;
     const mapY = (y: number) => offsetY + y * scaleY;
 
-    // 3. Render Plugin Custom Drawings ONLY for actively enabled plugins in events
+    // 3. Render Plugin Custom Drawings ONLY for actively enabled plugins (Fixed coordinates)
     for (const [pluginName, pluginEvents] of Object.entries(events)) {
       if (!Array.isArray(pluginEvents) || pluginEvents.length === 0) continue;
 
@@ -138,15 +111,14 @@ export const AnalyticsOverlay: React.FC<AnalyticsOverlayProps> = ({ cameraId }) 
             const sx2 = mapX(x2);
             const sy2 = mapY(y2);
 
-            // Glow shadow
             ctx.save();
-            ctx.shadowColor = `rgba(${d.color?.join(',') || '255,255,0'}, 0.8)`;
-            ctx.shadowBlur = 8;
+            ctx.shadowColor = `rgba(${d.color?.join(',') || '0,240,255'}, 0.8)`;
+            ctx.shadowBlur = 6;
             ctx.beginPath();
             ctx.moveTo(sx1, sy1);
             ctx.lineTo(sx2, sy2);
-            ctx.strokeStyle = `rgb(${d.color?.join(',') || '255,255,0'})`;
-            ctx.lineWidth = (d.thickness || 2) + 1;
+            ctx.strokeStyle = `rgb(${d.color?.join(',') || '0,240,255'})`;
+            ctx.lineWidth = (d.thickness || 2) + 0.5;
             ctx.stroke();
             ctx.restore();
           }
@@ -170,7 +142,6 @@ export const AnalyticsOverlay: React.FC<AnalyticsOverlayProps> = ({ cameraId }) 
       const screenW = (x2 - x1) * scaleX;
       const screenH = (y2 - y1) * scaleY;
 
-      // Skip invalid / off-canvas boxes
       if (screenW <= 0 || screenH <= 0) continue;
 
       const color = CLASS_COLORS[class_id] || '#10B981';
@@ -181,28 +152,28 @@ export const AnalyticsOverlay: React.FC<AnalyticsOverlayProps> = ({ cameraId }) 
 
       // Bounding Box Rect
       ctx.strokeStyle = color;
-      ctx.lineWidth = 2.5;
+      ctx.lineWidth = 2;
       ctx.strokeRect(screenX, screenY, screenW, screenH);
 
-      // Target Glow Fill
-      ctx.fillStyle = `${color}18`;
+      // Target Subtle Fill
+      ctx.fillStyle = `${color}14`;
       ctx.fillRect(screenX, screenY, screenW, screenH);
 
       // Label Tag Background
       ctx.font = 'bold 11px Inter, sans-serif';
       const textMetrics = ctx.measureText(labelText);
-      const tagHeight = 18;
-      const tagWidth = textMetrics.width + 10;
+      const tagHeight = 16;
+      const tagWidth = textMetrics.width + 8;
       const tagY = Math.max(offsetY, screenY - tagHeight);
 
       ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.roundRect(screenX, tagY, tagWidth, tagHeight, [4, 4, 0, 0]);
+      ctx.roundRect(screenX, tagY, tagWidth, tagHeight, [3, 3, 0, 0]);
       ctx.fill();
 
       // Label Text
       ctx.fillStyle = '#000000';
-      ctx.fillText(labelText, screenX + 5, tagY + 13);
+      ctx.fillText(labelText, screenX + 4, tagY + 12);
     }
   }, [telemetry]);
 

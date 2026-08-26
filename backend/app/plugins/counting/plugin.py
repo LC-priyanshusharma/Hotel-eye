@@ -37,15 +37,15 @@ class PeopleCountingPlugin(BaseDetectionPlugin):
         
         current_count = 0
         
-        # Dynamically adapt line coordinates to video frame dimensions
-        if frame_data.frame is not None:
+        # Fixed reference dimensions per camera source to prevent any line jittering
+        if "77389945" in camera_id or "f687142d" in camera_id:
+            fw, fh = 576, 1024
+        elif frame_data.frame is not None:
             fh, fw = frame_data.frame.shape[:2]
         else:
-            max_bx = max([d.bbox[2] for d in frame_data.detections if d.bbox and len(d.bbox) >= 4] or [1280])
-            max_by = max([d.bbox[3] for d in frame_data.detections if d.bbox and len(d.bbox) >= 4] or [720])
-            fw, fh = (576, 1024) if max_by > max_bx else (1280, 720)
+            fw, fh = 1280, 720
 
-        # Dual parallel lines inside the camera view
+        # Fixed dual parallel lines inside the camera view
         line1_y = int(fh * 0.45) # Upper line (Entry / IN line)
         line2_y = int(fh * 0.65) # Lower line (Exit / OUT line)
         line_x_start = int(fw * 0.08)
