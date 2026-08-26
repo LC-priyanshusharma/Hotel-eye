@@ -243,13 +243,15 @@ export const CameraCard = memo(({ id, name, location, pipelineStatus: parentPipe
                   </span>
                 </div>
 
-                <div className="flex items-center gap-1.5 text-[10px] bg-background/60 border border-pink-500/30 px-2 py-1 rounded backdrop-blur-sm text-white font-mono shadow-md pointer-events-auto" title="Footfall Exit Count (OUT)">
-                  <span className="w-2 h-2 rounded-full bg-pink-400" />
-                  <span className="font-semibold text-gray-300">OUT:</span>
-                  <span className="font-bold text-pink-400">
-                    {outCount}
-                  </span>
-                </div>
+                {outCount > 0 && (
+                  <div className="flex items-center gap-1.5 text-[10px] bg-background/60 border border-pink-500/30 px-2 py-1 rounded backdrop-blur-sm text-white font-mono shadow-md pointer-events-auto" title="Footfall Exit Count (OUT)">
+                    <span className="w-2 h-2 rounded-full bg-pink-400" />
+                    <span className="font-semibold text-gray-300">OUT:</span>
+                    <span className="font-bold text-pink-400">
+                      {outCount}
+                    </span>
+                  </div>
+                )}
 
                 <div className="flex items-center gap-1.5 text-[10px] bg-background/60 border border-emerald-500/30 px-2 py-1 rounded backdrop-blur-sm text-white font-mono shadow-md pointer-events-auto" title="Total Unique People Counted">
                   <UserCheck className="w-3 h-3 text-emerald-400" />

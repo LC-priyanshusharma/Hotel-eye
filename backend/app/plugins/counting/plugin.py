@@ -73,10 +73,8 @@ class PeopleCountingPlugin(BaseDetectionPlugin):
                         curr_y = track_history[tid][-1]
                         stage = track_stages.get(tid)
                         
-                        # IN: First touch Line 1, then touch Line 2 (Line 1 -> Line 2)
-                        if (prev_y < line1_y <= curr_y) or (line1_y <= curr_y < line2_y and stage is None):
-                            track_stages[tid] = "touched_line1"
-                        elif stage == "touched_line1" and (curr_y >= line2_y or (prev_y < line2_y <= curr_y)):
+                        # IN: Downward crossing over entry line threshold
+                        if prev_y < line1_y <= curr_y and stage != "completed_in":
                             state["in_count"] += 1
                             track_stages[tid] = "completed_in"
                             events.append(DetectionEvent(
@@ -89,31 +87,11 @@ class PeopleCountingPlugin(BaseDetectionPlugin):
                                     "track_id": tid,
                                     "direction": "IN",
                                     "in_count": state["in_count"],
-                                    "out_count": state["out_count"]
-                                }
-                            ))
-                            
-                        # OUT: First touch Line 2, then touch Line 1 (Line 2 -> Line 1)
-                        elif (prev_y > line2_y >= curr_y) or (line1_y < curr_y <= line2_y and stage is None):
-                            track_stages[tid] = "touched_line2"
-                        elif stage == "touched_line2" and (curr_y <= line1_y or (prev_y > line1_y >= curr_y)):
-                            state["out_count"] += 1
-                            track_stages[tid] = "completed_out"
-                            events.append(DetectionEvent(
-                                plugin_name=self.plugin_name,
-                                event_type="LINE_CROSSED",
-                                camera_id=camera_id,
-                                timestamp=timestamp,
-                                confidence=1.0,
-                                metadata={
-                                    "track_id": tid,
-                                    "direction": "OUT",
-                                    "in_count": state["in_count"],
-                                    "out_count": state["out_count"]
+                                    "out_count": 0
                                 }
                             ))
 
-        # Always emit a PERSON_COUNT event for live footfall stats and 2 counting lines
+        # Always emit a PERSON_COUNT event for live footfall stats and single entry counting line
         events.append(DetectionEvent(
             plugin_name=self.plugin_name,
             event_type="PERSON_COUNT",
@@ -123,19 +101,13 @@ class PeopleCountingPlugin(BaseDetectionPlugin):
             metadata={
                 "current_people_in_frame": current_count,
                 "in_count": state["in_count"],
-                "out_count": state["out_count"],
+                "out_count": 0,
                 "total_unique_people_seen": len(unique_ids),
                 "drawings": [
                     {
                         "type": "line",
                         "coords": [[line_x_start, line1_y], [line_x_end, line1_y]],
-                        "color": [0, 240, 255], # Cyan Line 1 (Entry threshold)
-                        "thickness": 2
-                    },
-                    {
-                        "type": "line",
-                        "coords": [[line_x_start, line2_y], [line_x_end, line2_y]],
-                        "color": [255, 60, 180], # Pink Line 2 (Interior floor)
+                        "color": [0, 240, 255], # Cyan Entry Threshold Line
                         "thickness": 2
                     }
                 ]
