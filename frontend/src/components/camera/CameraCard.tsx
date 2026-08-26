@@ -15,32 +15,35 @@ import { PluginManagerModal } from './PluginManagerModal'
 export const CameraCard = memo(({ id, name, location, pipelineStatus: parentPipelineStatus = "Stopped" }: any) => {
   const { activeCameraId, setActiveCamera } = useAppStore()
   const { addToast } = useToastStore()
-  const { personCount, inCount, outCount, isCountingEnabled } = useCameraStateStore(state => {
-    const events = state.states[id]?.events?.PeopleCountingPlugin;
-    if (!events) return { personCount: 0, inCount: 0, outCount: 0, isCountingEnabled: false };
-    for (const event of events) {
-      if (event.event_type === "PERSON_COUNT") {
-        return {
-          personCount: event.metadata?.current_people_in_frame || 0,
-          inCount: event.metadata?.in_count || 0,
-          outCount: event.metadata?.out_count || 0,
-          isCountingEnabled: true
-        };
-      }
-    }
-    return { personCount: 0, inCount: 0, outCount: 0, isCountingEnabled: false };
-  })
+  const countingEvents = useCameraStateStore(state => state.states[id]?.events?.PeopleCountingPlugin)
+  const cartonEvents = useCameraStateStore(state => state.states[id]?.events?.CartonCountingPlugin)
 
-  const cartonCount = useCameraStateStore(state => {
-    const events = state.states[id]?.events?.CartonCountingPlugin;
-    if (!events) return 0;
-    for (const event of events) {
-      if (event.event_type === "CARTON_STATS") {
-        return event.metadata?.total_cartons_counted || 0;
+  let personCount = 0
+  let inCount = 0
+  let outCount = 0
+  let isCountingEnabled = false
+
+  if (Array.isArray(countingEvents)) {
+    for (const event of countingEvents) {
+      if (event.event_type === "PERSON_COUNT") {
+        personCount = event.metadata?.current_people_in_frame || 0
+        inCount = event.metadata?.in_count || 0
+        outCount = event.metadata?.out_count || 0
+        isCountingEnabled = true
+        break
       }
     }
-    return 0;
-  })
+  }
+
+  let cartonCount = 0
+  if (Array.isArray(cartonEvents)) {
+    for (const event of cartonEvents) {
+      if (event.event_type === "CARTON_STATS") {
+        cartonCount = event.metadata?.total_cartons_counted || 0
+        break
+      }
+    }
+  }
   const isActive = activeCameraId === id;
   const [pipelineStatus, setPipelineStatus] = useState<string>(parentPipelineStatus)
   const [isPluginModalOpen, setIsPluginModalOpen] = useState(false)
