@@ -32,9 +32,25 @@ class PeopleCountingPlugin(BaseDetectionPlugin):
         
         current_count = 0
         from config.config import config
+        
+        # Dynamically adapt line coordinates to video frame dimensions
+        if frame_data.frame is not None:
+            fh, fw = frame_data.frame.shape[:2]
+        else:
+            max_bx = max([d.bbox[2] for d in frame_data.detections if d.bbox and len(d.bbox) >= 4] or [1280])
+            max_by = max([d.bbox[3] for d in frame_data.detections if d.bbox and len(d.bbox) >= 4] or [720])
+            fw, fh = (576, 1024) if max_by > max_bx else (1280, 720)
+
         line_y = getattr(config, 'LINE_CROSSING_Y', 600)
         line_x_start = getattr(config, 'LINE_CROSSING_X_START', 750)
         line_x_end = getattr(config, 'LINE_CROSSING_X_END', 1150)
+
+        if line_x_end > fw or line_x_start >= fw:
+            line_x_start = int(fw * 0.05)
+            line_x_end = int(fw * 0.95)
+        if line_y >= fh:
+            line_y = int(fh * 0.65)
+            
         direction = getattr(config, 'LINE_CROSSING_DIRECTION', 'down')
         
         for det in frame_data.detections:
