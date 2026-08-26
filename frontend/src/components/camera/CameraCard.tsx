@@ -15,26 +15,20 @@ import { PluginManagerModal } from './PluginManagerModal'
 export const CameraCard = memo(({ id, name, location, pipelineStatus: parentPipelineStatus = "Stopped" }: any) => {
   const { activeCameraId, setActiveCamera } = useAppStore()
   const { addToast } = useToastStore()
-  const personCount = useCameraStateStore(state => {
+  const { personCount, inCount, outCount, isCountingEnabled } = useCameraStateStore(state => {
     const events = state.states[id]?.events?.PeopleCountingPlugin;
-    if (!events) return 0;
+    if (!events) return { personCount: 0, inCount: 0, outCount: 0, isCountingEnabled: false };
     for (const event of events) {
       if (event.event_type === "PERSON_COUNT") {
-        return event.metadata?.current_people_in_frame || 0;
+        return {
+          personCount: event.metadata?.current_people_in_frame || 0,
+          inCount: event.metadata?.in_count || 0,
+          outCount: event.metadata?.out_count || 0,
+          isCountingEnabled: true
+        };
       }
     }
-    return 0;
-  })
-
-  const totalPeopleCount = useCameraStateStore(state => {
-    const events = state.states[id]?.events?.PeopleCountingPlugin;
-    if (!events) return 0;
-    for (const event of events) {
-      if (event.event_type === "PERSON_COUNT") {
-        return event.metadata?.total_unique_people_seen || 0;
-      }
-    }
-    return 0;
+    return { personCount: 0, inCount: 0, outCount: 0, isCountingEnabled: false };
   })
 
   const cartonCount = useCameraStateStore(state => {
@@ -223,25 +217,35 @@ export const CameraCard = memo(({ id, name, location, pipelineStatus: parentPipe
             >
               <Trash2 className="w-3 h-3" /> DEL
             </button>
-            <div className="flex items-center gap-1.5 text-[10px] bg-background/60 border border-foreground/10 px-2 py-1 rounded backdrop-blur-sm text-white font-mono shadow-md pointer-events-auto" title="Current People in Frame">
-              <Users className="w-3 h-3 text-primary" />
-              <span className="font-semibold text-gray-300">CW:</span>
-              <span className={cn(
-                "font-bold",
-                personCount > 10 ? "text-danger" : personCount > 5 ? "text-warning" : "text-success"
-              )}>
-                {personCount}
-              </span>
-            </div>
+            {isCountingEnabled && (
+              <>
+                <div className="flex items-center gap-1.5 text-[10px] bg-background/60 border border-foreground/10 px-2 py-1 rounded backdrop-blur-sm text-white font-mono shadow-md pointer-events-auto" title="Current People in Frame">
+                  <Users className="w-3 h-3 text-primary" />
+                  <span className="font-semibold text-gray-300">CW:</span>
+                  <span className={cn(
+                    "font-bold",
+                    personCount > 10 ? "text-danger" : personCount > 5 ? "text-warning" : "text-success"
+                  )}>
+                    {personCount}
+                  </span>
+                </div>
 
-            {totalPeopleCount > 0 && (
-              <div className="flex items-center gap-1.5 text-[10px] bg-background/60 border border-foreground/10 px-2 py-1 rounded backdrop-blur-sm text-white font-mono shadow-md pointer-events-auto" title="Total Unique People Counted">
-                <UserCheck className="w-3 h-3 text-emerald-400" />
-                <span className="font-semibold text-gray-300">TOT:</span>
-                <span className="font-bold text-emerald-400">
-                  {totalPeopleCount}
-                </span>
-              </div>
+                <div className="flex items-center gap-1.5 text-[10px] bg-background/60 border border-cyan-500/30 px-2 py-1 rounded backdrop-blur-sm text-white font-mono shadow-md pointer-events-auto" title="Footfall Entry Count (IN)">
+                  <span className="w-2 h-2 rounded-full bg-cyan-400" />
+                  <span className="font-semibold text-gray-300">IN:</span>
+                  <span className="font-bold text-cyan-400">
+                    {inCount}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1.5 text-[10px] bg-background/60 border border-pink-500/30 px-2 py-1 rounded backdrop-blur-sm text-white font-mono shadow-md pointer-events-auto" title="Footfall Exit Count (OUT)">
+                  <span className="w-2 h-2 rounded-full bg-pink-400" />
+                  <span className="font-semibold text-gray-300">OUT:</span>
+                  <span className="font-bold text-pink-400">
+                    {outCount}
+                  </span>
+                </div>
+              </>
             )}
             
             {cartonCount > 0 && (

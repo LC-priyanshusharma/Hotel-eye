@@ -192,8 +192,19 @@ class AppConfig(BaseSettings):
     LINE_CROSSING_X_END: int = Field(default=1150, description="Ending X coordinate of the line (e.g. right edge of the door)")
     LINE_CROSSING_DIRECTION: str = Field(default="down", description="Direction to count: up, down, or both")
     
-    def get_allowed_plugins(self, camera_id: str) -> list:
-        return self.CAMERA_PLUGINS.get(camera_id, [])
+    def get_allowed_plugins(self, camera_id: str):
+        import os, json
+        state_file = self._get_state_file_path()
+        try:
+            if os.path.exists(state_file):
+                mtime = os.path.getmtime(state_file)
+                if mtime != getattr(self, "_last_mtime", 0):
+                    with open(state_file, "r") as f:
+                        self.CAMERA_PLUGINS = json.load(f)
+                        self._last_mtime = mtime
+        except Exception:
+            pass
+        return self.CAMERA_PLUGINS.get(camera_id, None)
 
 config = AppConfig()
 

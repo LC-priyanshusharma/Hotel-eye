@@ -22,16 +22,20 @@ class PeopleCountingPlugin(BaseDetectionPlugin):
         camera_id = frame_data.camera_id
         timestamp = frame_data.timestamp
         events = []
-        logger.debug(f"PeopleCountingPlugin running for {camera_id} with {len(frame_data.detections)} detections")
+        
         state = tracker_context.get_state(self.plugin_name, camera_id)
         if "unique_ids" not in state:
             state["unique_ids"] = set()
             state["track_history"] = {}
+            state["track_stages"] = {}
+            state["in_count"] = 0
+            state["out_count"] = 0
+            
         unique_ids = state["unique_ids"]
         track_history = state["track_history"]
+        track_stages = state["track_stages"]
         
         current_count = 0
-        from config.config import config
         
         # Dynamically adapt line coordinates to video frame dimensions
         if frame_data.frame is not None:
@@ -41,67 +45,45 @@ class PeopleCountingPlugin(BaseDetectionPlugin):
             max_by = max([d.bbox[3] for d in frame_data.detections if d.bbox and len(d.bbox) >= 4] or [720])
             fw, fh = (576, 1024) if max_by > max_bx else (1280, 720)
 
-        line_y = getattr(config, 'LINE_CROSSING_Y', 600)
-        line_x_start = getattr(config, 'LINE_CROSSING_X_START', 750)
-        line_x_end = getattr(config, 'LINE_CROSSING_X_END', 1150)
-
-        if line_x_end > fw or line_x_start >= fw:
-            line_x_start = int(fw * 0.05)
-            line_x_end = int(fw * 0.95)
-        if line_y >= fh:
-            line_y = int(fh * 0.65)
-            
-        direction = getattr(config, 'LINE_CROSSING_DIRECTION', 'down')
+        # Dual parallel lines inside the camera view
+        line1_y = int(fh * 0.45) # Upper line (Entry / IN line)
+        line2_y = int(fh * 0.65) # Lower line (Exit / OUT line)
+        line_x_start = int(fw * 0.08)
+        line_x_end = int(fw * 0.92)
         
         for det in frame_data.detections:
-            cls_id = det.class_id
+            cls_id = int(det.class_id)
             track_id = det.track_id
             xyxy = det.bbox
             
-            if int(cls_id) == 0:
+            if cls_id == 0:
                 current_count += 1
                 
-                # Only do line crossing and unique ID logic if we have a valid track_id
                 if track_id is not None:
                     tid = int(track_id)
                     unique_ids.add(tid)
                     
-                    # Calculate center Y
                     x1, y1, x2, y2 = xyxy
                     cy = (y1 + y2) / 2
+                    cx = (x1 + x2) / 2
                     
                     if tid not in track_history:
                         track_history[tid] = []
                     track_history[tid].append(cy)
-                    
-                    # Keep history small
-                    if len(track_history[tid]) > 10:
+                    if len(track_history[tid]) > 15:
                         track_history[tid].pop(0)
                         
-                    # Check line crossing
-                    if len(track_history[tid]) >= 2:
+                    if len(track_history[tid]) >= 2 and line_x_start <= cx <= line_x_end:
                         prev_y = track_history[tid][-2]
                         curr_y = track_history[tid][-1]
+                        stage = track_stages.get(tid)
                         
-                        # Only trigger if the person's center X is within the door boundaries
-                        cx = (x1 + x2) / 2
-                        is_within_x_bounds = line_x_start <= cx <= line_x_end
-                        
-                        crossed_down = prev_y < line_y and curr_y >= line_y
-                        crossed_up = prev_y > line_y and curr_y <= line_y
-                        
-                        crossed = False
-                        if is_within_x_bounds:
-                            if direction == "down" and crossed_down:
-                                crossed = True
-                            elif direction == "up" and crossed_up:
-                                crossed = True
-                            elif direction == "both" and (crossed_down or crossed_up):
-                                crossed = True
-                            
-                        if crossed:
-                            track_history[tid] = [curr_y]
-                            
+                        # IN Direction: Moving DOWN (Line 1 -> Line 2)
+                        if prev_y < line1_y and curr_y >= line1_y:
+                            track_stages[tid] = "passed_line1"
+                        elif stage == "passed_line1" and prev_y < line2_y and curr_y >= line2_y:
+                            state["in_count"] += 1
+                            track_stages[tid] = "completed_in"
                             events.append(DetectionEvent(
                                 plugin_name=self.plugin_name,
                                 event_type="LINE_CROSSED",
@@ -110,12 +92,33 @@ class PeopleCountingPlugin(BaseDetectionPlugin):
                                 confidence=1.0,
                                 metadata={
                                     "track_id": tid,
-                                    "line_y": line_y,
-                                    "direction_crossed": "down" if crossed_down else "up"
+                                    "direction": "IN",
+                                    "in_count": state["in_count"],
+                                    "out_count": state["out_count"]
                                 }
                             ))
                             
-        # Always emit a PERSON_COUNT event for live stats and draw the line
+                        # OUT Direction: Moving UP (Line 2 -> Line 1)
+                        elif prev_y > line2_y and curr_y <= line2_y:
+                            track_stages[tid] = "passed_line2"
+                        elif stage == "passed_line2" and prev_y > line1_y and curr_y <= line1_y:
+                            state["out_count"] += 1
+                            track_stages[tid] = "completed_out"
+                            events.append(DetectionEvent(
+                                plugin_name=self.plugin_name,
+                                event_type="LINE_CROSSED",
+                                camera_id=camera_id,
+                                timestamp=timestamp,
+                                confidence=1.0,
+                                metadata={
+                                    "track_id": tid,
+                                    "direction": "OUT",
+                                    "in_count": state["in_count"],
+                                    "out_count": state["out_count"]
+                                }
+                            ))
+
+        # Always emit a PERSON_COUNT event for live footfall stats and 2 counting lines
         events.append(DetectionEvent(
             plugin_name=self.plugin_name,
             event_type="PERSON_COUNT",
@@ -124,12 +127,20 @@ class PeopleCountingPlugin(BaseDetectionPlugin):
             confidence=1.0,
             metadata={
                 "current_people_in_frame": current_count,
+                "in_count": state["in_count"],
+                "out_count": state["out_count"],
                 "total_unique_people_seen": len(unique_ids),
                 "drawings": [
                     {
                         "type": "line",
-                        "coords": [[line_x_start, line_y], [line_x_end, line_y]],
-                        "color": [0, 255, 255], # Yellow line
+                        "coords": [[line_x_start, line1_y], [line_x_end, line1_y]],
+                        "color": [0, 240, 255], # Cyan line 1 (IN)
+                        "thickness": 2
+                    },
+                    {
+                        "type": "line",
+                        "coords": [[line_x_start, line2_y], [line_x_end, line2_y]],
+                        "color": [255, 60, 180], # Pink/Magenta line 2 (OUT)
                         "thickness": 2
                     }
                 ]

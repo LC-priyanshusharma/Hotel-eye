@@ -64,7 +64,7 @@ class DetectionEngine:
         from config.config import config
         # Check if camera has specific enabled plugins list
         camera_id = frame_data.camera_id
-        allowed = config.CAMERA_PLUGINS.get(camera_id)
+        allowed = config.get_allowed_plugins(camera_id)
         
         for p_name, p_instance in self.active_plugins.items():
             # If camera has an explicit list of plugins configured, skip any plugin not in that list
