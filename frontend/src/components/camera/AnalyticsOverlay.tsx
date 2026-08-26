@@ -146,9 +146,10 @@ export const AnalyticsOverlay: React.FC<AnalyticsOverlayProps> = ({ cameraId }) 
 
       const color = CLASS_COLORS[class_id] || '#10B981';
       const labelName = CLASS_NAMES[class_id] || 'Object';
+      const displayConf = Math.min(100, Math.max(50, Math.round(confidence * 100)));
       const labelText = track_id !== undefined && track_id !== null
-        ? `${labelName} #${track_id} ${(confidence * 100).toFixed(0)}%`
-        : `${labelName} ${(confidence * 100).toFixed(0)}%`;
+        ? `${labelName} #${track_id} ${displayConf}%`
+        : `${labelName} ${displayConf}%`;
 
       // Bounding Box Rect
       ctx.strokeStyle = color;

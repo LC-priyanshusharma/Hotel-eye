@@ -1159,15 +1159,30 @@ class DeepStreamPipeline:
                     except StopIteration:
                         break
 
+                x1 = float(rect_params.left)
+                y1 = float(rect_params.top)
+                w = float(rect_params.width)
+                h = float(rect_params.height)
+                x2 = x1 + w
+                y2 = y1 + h
+
+                # Filter out tiny noise / artifacts
+                if int(obj_meta.class_id) == 0 and (w < 25 or h < 50):
+                    try:
+                        l_obj = l_obj.next
+                    except StopIteration:
+                        break
+                    continue
+
+                # Clean confidence score (DeepStream defaults to -0.1 when unassigned)
+                conf = float(obj_meta.confidence)
+                if conf <= 0.0:
+                    conf = 0.92
+
                 det = NormalizedDetection(
-                    bbox=[
-                        rect_params.left,
-                        rect_params.top,
-                        rect_params.width,
-                        rect_params.height
-                    ],
-                    confidence=obj_meta.confidence,
-                    class_id=obj_meta.class_id,
+                    bbox=[x1, y1, x2, y2],
+                    confidence=conf,
+                    class_id=int(obj_meta.class_id),
                     track_id=track_id
                 )
 

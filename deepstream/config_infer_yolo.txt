@@ -19,5 +19,5 @@ symmetric-padding=1
 
 [class-attrs-all]
 nms-iou-threshold=0.45
-pre-cluster-threshold=0.25
-topk=300
+pre-cluster-threshold=0.40
+topk=100
