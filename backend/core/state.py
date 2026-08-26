@@ -23,7 +23,7 @@ def update_global_state(packet: dict):
         cached_events = old_packet.get("_cached_events", {}).copy()
         
         from config.config import config
-        allowed = config.CAMERA_PLUGINS.get(cam_id)
+        allowed = config.get_allowed_plugins(cam_id)
         if allowed is not None:
             for p in list(cached_events.keys()):
                 if p not in allowed:
@@ -34,10 +34,13 @@ def update_global_state(packet: dict):
             if events_list and (allowed is None or plugin_name in allowed):
                 cached_events[plugin_name] = {"data": events_list, "ts": now}
                 
+        PERSISTENT_PLUGINS = {"PeopleCountingPlugin", "CartonCountingPlugin", "ParkingAnalyticsPlugin"}
         pruned_events = {}
         for plugin_name, cache_obj in list(cached_events.items()):
-            if (allowed is None or plugin_name in allowed) and (now - cache_obj["ts"] <= EVENT_TTL_SECONDS):
-                pruned_events[plugin_name] = cache_obj["data"]
+            if allowed is None or plugin_name in allowed:
+                # Persistent stats plugins stay alive while enabled; transient alerts use TTL
+                if plugin_name in PERSISTENT_PLUGINS or (now - cache_obj["ts"] <= EVENT_TTL_SECONDS):
+                    pruned_events[plugin_name] = cache_obj["data"]
                 
         if old_packet and "GestureDetectionPlugin" in old_packet.get("events", {}):
             if allowed is None or "GestureDetectionPlugin" in allowed:
