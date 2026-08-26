@@ -365,10 +365,15 @@ class DeepStreamPipeline:
 
         if name.find("source") != -1:
             if Object.find_property("protocols") is not None:
-                Object.set_property(
-                    "protocols",
-                    4
-                )
+                Object.set_property("protocols", 4)
+            if Object.find_property("latency") is not None:
+                Object.set_property("latency", 200)
+            if Object.find_property("retry") is not None:
+                Object.set_property("retry", 500)
+            if Object.find_property("timeout") is not None:
+                Object.set_property("timeout", 5000000)
+            if Object.find_property("tcp-timeout") is not None:
+                Object.set_property("tcp-timeout", 5000000)
 
     @staticmethod
     def _encode_rtsp_uri(uri):
@@ -1200,54 +1205,53 @@ class DeepStreamPipeline:
                 except StopIteration:
                     break
 
-            if detections:
-                frame_surface = None
-                try:
-                    if any(int(d.class_id) in [0, 2, 3, 5, 7] for d in detections):
-                        n_frame = pyds.get_nvds_buf_surface(hash(gst_buffer), frame_meta.batch_id)
-                        frame_surface = np.array(n_frame, copy=True, order='C')
-                except Exception:
-                    pass
+            frame_surface = None
+            try:
+                if any(int(d.class_id) in [0, 2, 3, 5, 7] for d in detections):
+                    n_frame = pyds.get_nvds_buf_surface(hash(gst_buffer), frame_meta.batch_id)
+                    frame_surface = np.array(n_frame, copy=True, order='C')
+            except Exception:
+                pass
 
-                frame_data = FrameData(
-                    frame=frame_surface,
-                    detections=detections,
-                    camera_id=camera_id,
-                    timestamp=time.time(),
-                    faces=extracted_faces,
-                    camera_url=""
-                )
+            frame_data = FrameData(
+                frame=frame_surface,
+                detections=detections,
+                camera_id=camera_id,
+                timestamp=time.time(),
+                faces=extracted_faces,
+                camera_url=""
+            )
 
-                try:
-                    events = self.detection_engine.run_plugins(frame_data)
-                    
-                    import json
-                    from core.utils import clean_numpy
-                    
-                    det_payload = [
-                        {
-                            "class_id": int(d.class_id),
-                            "confidence": float(d.confidence),
-                            "bbox": [float(b) for b in d.bbox],
-                            "track_id": int(d.track_id) if d.track_id is not None else None
-                        }
-                        for d in detections
-                    ]
-                    
-                    cleaned_events = clean_numpy(events) if events else {}
-                    
-                    payload = {
-                        "camera_id": camera_id,
-                        "sensor": {"id": camera_id},
-                        "detections": det_payload,
-                        "events": cleaned_events,
-                        "timestamp": time.time(),
-                        "fps": 30.0
+            try:
+                events = self.detection_engine.run_plugins(frame_data)
+                
+                import json
+                from core.utils import clean_numpy
+                
+                det_payload = [
+                    {
+                        "class_id": int(d.class_id),
+                        "confidence": float(d.confidence),
+                        "bbox": [float(b) for b in d.bbox],
+                        "track_id": int(d.track_id) if d.track_id is not None else None
                     }
-                    
-                    self.redis_client.publish("inference_result_ds", json.dumps(payload))
-                except Exception as exc:
-                    logger.error(f"[{camera_id}] DeepStream publish/engine error: {exc}")
+                    for d in detections
+                ]
+                
+                cleaned_events = clean_numpy(events) if events else {}
+                
+                payload = {
+                    "camera_id": camera_id,
+                    "sensor": {"id": camera_id},
+                    "detections": det_payload,
+                    "events": cleaned_events,
+                    "timestamp": time.time(),
+                    "fps": 30.0
+                }
+                
+                self.redis_client.publish("inference_result_ds", json.dumps(payload))
+            except Exception as exc:
+                logger.error(f"[{camera_id}] DeepStream publish/engine error: {exc}")
 
             try:
                 l_frame = l_frame.next

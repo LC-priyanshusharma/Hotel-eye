@@ -58,7 +58,7 @@ class DetectionEngine:
         
     def run_plugins(self, frame_data: FrameData) -> Dict[str, Any]:
         all_events = {}
-        if not self.active_plugins or not frame_data.detections:
+        if not self.active_plugins:
             return all_events
             
         from config.config import config

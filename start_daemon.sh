@@ -21,6 +21,9 @@ export REDIS_URL="redis://localhost:6379/0"
 export PYTHONPATH="$DIR/backend:$PYTHONPATH"
 nohup uvicorn main:app --host 0.0.0.0 --port 8000 > "$DIR/logs/backend.log" 2>&1 &
 
+echo "Waiting for RTSP publishers to initialize..."
+sleep 3
+
 echo "Starting DeepStream Pipeline..."
 cd "$DIR/deepstream_pyds"
 export PYTHONPATH="$DIR/backend:$DIR/deepstream_pyds:$PYTHONPATH"

@@ -173,11 +173,13 @@ class AppConfig(BaseSettings):
         return {}
 
     def save_plugins_state(self):
-        import json
+        import json, os
         try:
             state_file = self._get_state_file_path()
             with open(state_file, "w") as f:
                 json.dump(self.CAMERA_PLUGINS, f)
+                f.flush()
+                os.fsync(f.fileno())
         except Exception as e:
             pass
 
@@ -197,11 +199,8 @@ class AppConfig(BaseSettings):
         state_file = self._get_state_file_path()
         try:
             if os.path.exists(state_file):
-                mtime = os.path.getmtime(state_file)
-                if mtime != getattr(self, "_last_mtime", 0):
-                    with open(state_file, "r") as f:
-                        self.CAMERA_PLUGINS = json.load(f)
-                        self._last_mtime = mtime
+                with open(state_file, "r") as f:
+                    self.CAMERA_PLUGINS = json.load(f)
         except Exception:
             pass
         return self.CAMERA_PLUGINS.get(camera_id, None)
